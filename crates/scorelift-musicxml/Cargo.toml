@@ -1,6 +1,6 @@
 [package]
 name = "scorelift-musicxml"
-description = "MusicXML 4.0 and .mxl writer for the scorelift score model"
+description = "MusicXML 4.0 and .mxl reader and writer for the scorelift score model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,12 +9,10 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+roxmltree.workspace = true
 scorelift-model.workspace = true
 thiserror.workspace = true
 zip.workspace = true
-
-[dev-dependencies]
-roxmltree.workspace = true
 
 [lints]
 workspace = true

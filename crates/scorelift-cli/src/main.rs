@@ -1,4 +1,5 @@
 mod debug;
+mod eval;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -42,6 +43,22 @@ enum Command {
         #[arg(long)]
         raw: bool,
     },
+    /// Convert a PDF or image and compare it, bar by bar, with a correct
+    /// MusicXML transcription of the same music.
+    Eval {
+        input: PathBuf,
+        /// The correct transcription (.musicxml or .mxl).
+        truth: PathBuf,
+        /// Bars to compare, e.g. `1-40` (1-based, inclusive); default all.
+        #[arg(long)]
+        bars: Option<String>,
+        /// Part to compare, counting from 1.
+        #[arg(long, default_value_t = 1)]
+        part: usize,
+        /// Also list the bars that match exactly.
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -57,6 +74,13 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Debug { input, output, raw } => debug::run(&input, &output, raw)?,
+        Command::Eval {
+            input,
+            truth,
+            bars,
+            part,
+            all,
+        } => eval::run(&input, &truth, bars.as_deref(), part, all)?,
         Command::Convert { input, output } => {
             let conversion = scorelift_core::convert(&input, &Default::default())?;
             for w in &conversion.warnings {

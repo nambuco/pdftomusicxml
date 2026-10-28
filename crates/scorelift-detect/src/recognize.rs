@@ -91,8 +91,11 @@ fn score(img: &BinaryImage, integral: &Integral, t: &Template, x0: i64, y0: i64)
         (x0 + w) as usize,
         (y0 + h) as usize,
     );
-    // Cheap rejection: far too little or too much ink in the window.
-    if (region as f32) < 0.6 * t.ink as f32 || (region as f32) > 1.7 * t.ink as f32 {
+    // Cheap rejection: far too little or too much ink in the window. Some
+    // fonts draw quarter and shorter rests with thinner strokes than Bravura.
+    let thin = matches!(t.sym, Sym::Rest(n) if n >= scorelift_model::NoteType::Quarter);
+    let least = if thin { 0.45 } else { 0.6 };
+    if (region as f32) < least * t.ink as f32 || (region as f32) > 1.7 * t.ink as f32 {
         return None;
     }
     // Ink in a thin ring around the window counts against the match: a real
@@ -447,8 +450,12 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 }
                 _ => (0..=8).collect(),
             };
+            // A pixel or two off the line position matters to thin rest shapes.
             for step in steps {
-                scan_row(&clean, &integral, t, step_y(step), xl, xr, 0.68, &mut cands);
+                for dy in [-2.0, -1.0, 0.0, 1.0, 2.0] {
+                    let y = step_y(step).round() + dy;
+                    scan_row(&clean, &integral, t, y, xl, xr, 0.68, &mut cands);
+                }
             }
         }
         for t in by(&|s| matches!(s, Sym::Dynamic(_))) {
@@ -492,16 +499,22 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 run as f32 >= 0.9 * w as f32 && run as f32 <= 3.5 * sp
             })
         };
+        // Fonts differ in rest width, so the band starts a little away from
+        // the template's edges.
         let side_ink = |c: &Candidate| {
-            let pad = (0.5 * sp) as i64;
+            let (gap, pad) = ((0.2 * sp) as i64, (0.5 * sp) as i64);
             let rows = c.y0..c.y0 + c.h;
             let left = rows
                 .clone()
-                .map(|y| (c.x0 - pad..c.x0).filter(|&x| clean.get(x, y)).count())
+                .map(|y| {
+                    (c.x0 - gap - pad..c.x0 - gap)
+                        .filter(|&x| clean.get(x, y))
+                        .count()
+                })
                 .sum::<usize>();
             let right = rows
                 .map(|y| {
-                    (c.x0 + c.w..c.x0 + c.w + pad)
+                    (c.x0 + c.w + gap..c.x0 + c.w + gap + pad)
                         .filter(|&x| clean.get(x, y))
                         .count()
                 })
@@ -777,12 +790,22 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 continue;
             }
             let cx = (f.x0 + f.x1) / 2.0;
+            // A letter of a lyric under the beam has other letters beside it;
+            // a tuplet number stands alone.
+            let alone = |m: &(i64, i64, i64, i64)| {
+                !marks.iter().any(|o| {
+                    o != m
+                        && o.1 <= m.3
+                        && o.3 >= m.1
+                        && ((o.0 - m.2) as f32).max((m.0 - o.2) as f32) < 0.6 * sp
+                })
+            };
             let mark = marks.iter().find(|m| {
                 let mx = (m.0 + m.2) as f32 / 2.0;
                 let (my0, my1) = (m.1 as f32, m.3 as f32);
                 let above = my1 <= f.y0 && f.y0 - my1 <= 2.5 * sp;
                 let below = my0 >= f.y1 && my0 - f.y1 <= 2.5 * sp;
-                (mx - cx).abs() <= 0.8 * sp && (above || below)
+                (mx - cx).abs() <= 0.8 * sp && (above || below) && alone(m)
             });
             if let Some(m) = mark {
                 kept.push(Candidate {
@@ -801,11 +824,40 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
         // A rest never has a stem through it (an eighth rest's own stroke is
         // slanted, so it is not found as a stem): the flag or slash of a grace
         // note is not a rest.
+        // A stroke that stays within the rest is the rest's own (some fonts
+        // draw the quarter rest with a near-vertical stroke); it is not a
+        // stem, and a "notehead" on the rest's curl is not a note.
+        let reach = (0.5 * sp) as i64;
+        let inside = |st: &(i64, i64, i64, i64), c: &Candidate| {
+            st.1 >= c.x0 && st.0 < c.x0 + c.w && st.2 >= c.y0 - reach && st.3 < c.y0 + c.h + reach
+        };
         kept.retain(|c| {
             !matches!(c.sym, Sym::Rest(_))
                 || !stems.iter().any(|st| {
-                    st.1 >= c.x0 && st.0 < c.x0 + c.w && st.3 >= c.y0 && st.2 < c.y0 + c.h
+                    st.1 >= c.x0
+                        && st.0 < c.x0 + c.w
+                        && st.3 >= c.y0
+                        && st.2 < c.y0 + c.h
+                        && !inside(st, c)
                 })
+        });
+        let rests: Vec<Candidate> = kept
+            .iter()
+            .filter(|c| matches!(c.sym, Sym::Rest(_)))
+            .cloned()
+            .collect();
+        let stems: Vec<(i64, i64, i64, i64)> = stems
+            .into_iter()
+            .filter(|st| !rests.iter().any(|r| inside(st, r)))
+            .collect();
+        kept.retain(|c| {
+            if !matches!(c.sym, Sym::Head(_)) {
+                return true;
+            }
+            let (cx, cy) = (c.x0 + c.w / 2, c.y0 + c.h / 2);
+            !rests
+                .iter()
+                .any(|r| (r.x0..r.x0 + r.w).contains(&cx) && (r.y0..r.y0 + r.h).contains(&cy))
         });
 
         // Grace notes: a full-size template also fits a smaller notehead, so
@@ -1037,7 +1089,12 @@ fn hbars(img: &BinaryImage, mid: f32, sp: f32, x0: i64, x1: i64) -> Vec<(i64, i6
             .count() as f32
     };
     let thick = |x: i64| ink_in(x, mid - 0.4 * sp, mid + 0.4 * sp) >= 0.35 * sp;
-    let tall = |x: i64| ink_in(x, mid - 1.2 * sp, mid + 1.2 * sp) >= 1.4 * sp;
+    // A serif crosses the bar, reaching both above and below it; the stems
+    // at the ends of a beam on the middle line go one way only.
+    let tall = |x: i64| {
+        ink_in(x, mid - 1.2 * sp, mid - 0.5 * sp) >= 0.5 * sp
+            && ink_in(x, mid + 0.5 * sp, mid + 1.2 * sp) >= 0.5 * sp
+    };
     let mut out = Vec::new();
     let mut x = x0;
     while x < x1 {
@@ -1102,7 +1159,9 @@ fn beam_from(comp: &[(i64, i64)], sp: f32) -> Option<Fill> {
     let mut runs = Vec::with_capacity(cols.len());
     for ys in &mut cols {
         ys.sort_unstable();
-        let single = ys.windows(2).all(|w| w[1] - w[0] <= 1);
+        // One run, allowing a one-pixel notch where a staff line was erased
+        // along the beam's edge.
+        let single = ys.windows(2).all(|w| w[1] - w[0] <= 2);
         runs.push((
             single,
             ys.len() as f32,

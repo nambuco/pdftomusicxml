@@ -180,7 +180,7 @@ eval/                  # ground truth + metrics harness
 | M1 ✅ | Ingest + vision (2 wk) | `scorelift debug in.pdf` extracts the system images from all 3 samples and writes overlay PNGs with staves and barlines detected (100% of staves/measures found on the samples). **Result:** 61/61 staves, 274 measures; spot-checked systems match the printed measure numbers |
 | M2 ✅ | Vector fast path (2 wk) | Vector PDFs exported from MuseScore convert end to end at ≥98% note accuracy. Proves stages 5–7 without ML. **Result:** 100% of notes and rests on all three fixtures engraved by MuseScore 4 (pitch, duration, onset), plus clefs, keys, times, ties, slurs, tuplets, grace notes, dots, beams, lyrics, dynamics, hairpins, tempo, rehearsal marks, repeats, endings, multi-measure rests, title/composer/part names |
 | M3 🟡 | Classical recognisers + SIG (2 wk) | Template matching for noteheads, clefs and accidentals; morphology for stems and beams; interpretation graph + reduction. No ML yet (the Audiveris approach) |
-| M4 | Monophonic raster MVP (2 wk) | **Perfect Strangers Vocal** → MusicXML with ≥90% note accuracy (lyrics optional); compared against Audiveris on the same file |
+| M4 🟡 | Monophonic raster MVP (2 wk) | **Perfect Strangers Vocal** → MusicXML with ≥90% note accuracy (lyrics optional); compared against Audiveris on the same file |
 | M4b | Training pipeline v1 (3 wk, runs alongside M4–M6) | Synthetic data generator + segmentation and detector models exported to ONNX. Their outputs become extra inters with grades, so the robustness gains don't require rewriting the pipeline |
 | M5 | Chords and polyphony (3 wk) | **Organ** and **Wish You Were Here** ≥85% note accuracy; ties, tuplets, grace notes, dynamics; validate/repair stage in place |
 | M6 | GUI (3 wk) | Tauri app: open, review, correct, export; low-confidence highlighting |
@@ -231,9 +231,26 @@ Accuracy (notes and rests correct, F1) on MuseScore-engraved 280 dpi PNGs:
 | Piano duet | 90% | 90% |
 | Feature tour (chords, ties, triplet, grace note, multi-measure rest) | 100% | 97% |
 
-On the three private samples, about 2/3 of vocal measures, 2/3 of organ measures and 1/4 of Wish You Were Here measures add up to the time signature (a rough proxy; there is no ground truth for them yet).
+Not done yet: a real interpretation graph (only score-ranked overlap resolution and a few support rules so far), tuplets other than beamed triplets, overlapping second voices, text (lyrics, words, tempo; needs OCR), hairpins and endings from images. On the Ultimate Guitar samples, measures whose notes do not add up to the time signature were vocal 41, organ 56, Wish You Were Here 15 at the end of M3 (now 9, 22 and 15; see M4).
 
-Not done yet: a real interpretation graph (only score-ranked overlap resolution and a few support rules so far), tuplets other than beamed triplets, overlapping second voices, text (lyrics, words, tempo; needs OCR), hairpins and endings from images. On the Ultimate Guitar samples, measures whose notes do not add up to the time signature: vocal 41 of 94, organ 56 of 124, Wish You Were Here 15 of 83. Measuring real accuracy needs a ground-truth transcription (M4).
+### M4 status (in progress)
+A hand-made transcription of bars 1–40 of the Perfect Strangers vocal part (Dorico, kept in the git-ignored `fixtures-private/`) is the first ground truth. `scorelift eval in.pdf truth.musicxml --bars 1-40` converts the PDF, reads the transcription back (`scorelift_musicxml::read`) and lists every bar that differs. Both sides are compared as they sound (`compare::sounding`): Dorico re-notates rhythms by meter, writing two tied quarters where the PDF prints a half note.
+
+| Perfect Strangers vocal, bars 1–40 | Bars exact | Notes and rests F1 |
+|---|---|---|
+| Before M4 fixes | 19 of 40 | 54% |
+| Now | 39 of 40 | 97% |
+
+The one remaining bar (13) differs between the PDF and the transcription; the conversion matches the PDF. Measures not adding up to the time signature, whole files: vocal 41 → 9, organ 56 → 22, Wish You Were Here 15 → 15.
+
+### M4 lessons
+- **Compare as the music sounds.** Notation programs re-notate on import and export; merging ties and adjacent rests before comparing removed half of the apparent errors.
+- **Fonts differ from Bravura in stroke weight and width.** Ultimate Guitar's eighth rest has 59% of Bravura's ink (the quick ink pre-check needed 60%), and its half rest is wider than the template (the isolation check saw its own overhang as ink beside it). Leave room for both.
+- **Scan thin shapes a pixel or two off their line position.** Rounding the staff position moved an eighth rest's score from 0.88 to below the threshold.
+- **A multi-measure rest's serifs cross the bar.** A beam lying on the middle line has stems at both ends too, but they go one way only.
+- **A quarter rest can have a near-vertical stroke.** A stroke that stays within a rest is not a stem, and a notehead on the rest's curl is not a note.
+- **Lyrics under a beam can look like a tuplet number.** A tuplet number stands alone; a letter has neighbours.
+- **A beam crossing a staff line can lose a pixel row** where the line was erased along its edge; allow a one-pixel notch per column.
 
 ### M3 lessons
 - **Score symbols by shape agreement in both directions, with one pixel of slack.** Recall = template pixels with ink nearby; precision = ink (in the window and a ring around it) near the template. Plain Dice misses thin hollow noteheads; slack on recall alone floods false matches.

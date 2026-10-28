@@ -12,9 +12,9 @@ Runs on macOS, Windows and Linux.
 
 | Crate | Purpose | Status |
 |---|---|---|
-| `scorelift-model` | Score IR (parts, measures, voices, events), validation, fixtures | ✅ M0 |
-| `scorelift-musicxml` | IR → MusicXML 4.0 (`.musicxml`) and compressed `.mxl` | ✅ M0 |
-| `scorelift-cli` | `scorelift` command-line tool (`debug`, `demo`, `convert`) | ✅ M1 |
+| `scorelift-model` | Score IR (parts, measures, voices, events), validation, fixtures, comparison | ✅ M0 |
+| `scorelift-musicxml` | IR ↔ MusicXML 4.0 (`.musicxml`) and compressed `.mxl` | ✅ M0 |
+| `scorelift-cli` | `scorelift` command-line tool (`convert`, `eval`, `debug`, `demo`) | ✅ M1 |
 | `scorelift-core` | Pipeline orchestration (`analyze`, `convert`) | ✅ vector path |
 | `scorelift-pdf` | PDF ingest: images, glyphs (with Unicode/SMuFL), vector paths (pure Rust) | ✅ M2 |
 | `scorelift-vision` | Binarization, scale, staves, barlines, measures, overlays | ✅ M1 |
@@ -47,6 +47,17 @@ image per system (staff lines red, barlines blue, measures shaded) and a
 ```bash
 cargo run --release -p scorelift-cli -- debug score.pdf -o out/debug
 ```
+
+Measure accuracy against a correct transcription of the same music (exported
+from MuseScore, Dorico or Finale as MusicXML). It lists every bar that differs
+and the notes and rests missing or extra in it:
+
+```bash
+cargo run --release -p scorelift-cli -- eval score.pdf truth.musicxml --bars 1-40
+```
+
+Both sides are compared as they sound, so a half note against two tied
+quarters, or a half rest against two quarter rests, is not an error.
 
 Validate all fixtures against the official MusicXML 4.0 XSD (needs `xmllint` and `curl`):
 

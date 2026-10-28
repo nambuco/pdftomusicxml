@@ -21,9 +21,9 @@ struct Key {
     grace: bool,
 }
 
-impl fmt::Display for Key {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let what = match self.pitch {
+impl Key {
+    fn what(&self) -> String {
+        match self.pitch {
             Some(p) => format!(
                 "{:?}{}{}",
                 p.step,
@@ -31,7 +31,24 @@ impl fmt::Display for Key {
                 p.octave
             ),
             None => "rest".into(),
-        };
+        }
+    }
+
+    /// `onset pitch duration`, without the part and measure.
+    fn short(&self) -> String {
+        format!(
+            "{} {} {}{}",
+            self.onset,
+            self.what(),
+            self.duration,
+            if self.grace { " grace" } else { "" }
+        )
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let what = self.what();
         write!(
             f,
             "part {} measure {} staff {} at {}: {} for {}{}",
@@ -173,6 +190,113 @@ pub fn compare(expected: &Score, found: &Score) -> Comparison {
     c
 }
 
+/// Rewrites every voice as it sounds, so that notations of the same music
+/// compare equal: notes tied within a measure become one longer note, and
+/// consecutive rests become one rest. A half note and two tied quarters, or a
+/// half rest and two quarter rests, then give the same key.
+pub fn sounding(score: &Score) -> Score {
+    let mut out = score.clone();
+    for m in out.parts.iter_mut().flat_map(|p| p.measures.iter_mut()) {
+        for v in &mut m.voices {
+            let mut merged: Vec<crate::Event> = Vec::with_capacity(v.events.len());
+            for e in v.events.drain(..) {
+                if let Some(prev) = merged.last_mut()
+                    && !prev.is_grace()
+                    && !e.is_grace()
+                    && continues(prev, &e)
+                {
+                    prev.duration += e.duration;
+                    if let (EventContent::Chord(a), EventContent::Chord(b)) =
+                        (&mut prev.content, &e.content)
+                    {
+                        for (x, y) in a.iter_mut().zip(b) {
+                            x.tie_start = y.tie_start;
+                        }
+                    }
+                    continue;
+                }
+                merged.push(e);
+            }
+            v.events = merged;
+        }
+    }
+    out
+}
+
+/// Whether `next` only prolongs `prev`: a rest after a rest, or the same
+/// pitches with every note tied over.
+fn continues(prev: &crate::Event, next: &crate::Event) -> bool {
+    match (&prev.content, &next.content) {
+        (EventContent::Rest { .. }, EventContent::Rest { .. }) => true,
+        (EventContent::Chord(a), EventContent::Chord(b)) => {
+            a.len() == b.len()
+                && a.iter().all(|n| n.tie_start)
+                && a.iter().zip(b).all(|(x, y)| x.pitch == y.pitch)
+        }
+        _ => false,
+    }
+}
+
+/// One measure of a part, compared event by event.
+#[derive(Debug, Clone, Default)]
+pub struct MeasureDiff {
+    /// 0-based measure index.
+    pub index: usize,
+    /// `onset pitch duration` of every note and rest, in time order.
+    pub expected: Vec<String>,
+    pub found: Vec<String>,
+    /// Expected events that were not found, and found events not expected.
+    pub missing: Vec<String>,
+    pub extra: Vec<String>,
+}
+
+impl MeasureDiff {
+    pub fn is_exact(&self) -> bool {
+        self.missing.is_empty() && self.extra.is_empty()
+    }
+}
+
+/// Compares part `part` of both scores measure by measure, over the measures
+/// of `expected`.
+pub fn measure_diffs(expected: &Score, found: &Score, part: usize) -> Vec<MeasureDiff> {
+    let (a, b) = (keys(expected), keys(found));
+    let in_measure = |map: &HashMap<Key, usize>, m: usize| {
+        let mut v: Vec<(Key, usize)> = map
+            .iter()
+            .filter(|(k, _)| k.part == part && k.measure == m)
+            .map(|(k, &n)| (k.clone(), n))
+            .collect();
+        v.sort_by_key(|x| (x.0.onset, x.0.short()));
+        v
+    };
+    let count = expected.parts.get(part).map_or(0, |p| p.measures.len());
+    (0..count)
+        .map(|m| {
+            let (ea, fb) = (in_measure(&a, m), in_measure(&b, m));
+            let list = |v: &[(Key, usize)]| -> Vec<String> {
+                v.iter()
+                    .flat_map(|(k, n)| std::iter::repeat_n(k.short(), *n))
+                    .collect()
+            };
+            let surplus = |x: &[(Key, usize)], y: &[(Key, usize)]| -> Vec<String> {
+                x.iter()
+                    .flat_map(|(k, n)| {
+                        let other = y.iter().find(|(j, _)| j == k).map_or(0, |(_, m)| *m);
+                        std::iter::repeat_n(k.short(), n.saturating_sub(other))
+                    })
+                    .collect()
+            };
+            MeasureDiff {
+                index: m,
+                expected: list(&ea),
+                found: list(&fb),
+                missing: surplus(&ea, &fb),
+                extra: surplus(&fb, &ea),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,5 +321,25 @@ mod tests {
         assert_eq!(c.expected - c.matched, 1);
         assert_eq!(c.missing.len(), 1);
         assert_eq!(c.extra.len(), 1);
+    }
+
+    #[test]
+    fn tied_notes_and_split_rests_sound_like_one() {
+        use crate::{Event, NoteType, Pitch};
+        let a4 = Pitch::parse("A4").unwrap();
+        let mut a = fixtures::c_major_scale();
+        let mut b = a.clone();
+        a.parts[0].measures[0].voices[0].events = vec![
+            Event::note(&[a4], NoteType::Half, 0),
+            Event::rest(NoteType::Half, 0),
+        ];
+        b.parts[0].measures[0].voices[0].events = vec![
+            Event::note(&[a4], NoteType::Quarter, 0).tie_start(),
+            Event::note(&[a4], NoteType::Quarter, 0).tie_stop(),
+            Event::rest(NoteType::Quarter, 0),
+            Event::rest(NoteType::Quarter, 0),
+        ];
+        assert!(compare(&a, &b).f1() < 1.0);
+        assert_eq!(compare(&sounding(&a), &sounding(&b)).f1(), 1.0);
     }
 }

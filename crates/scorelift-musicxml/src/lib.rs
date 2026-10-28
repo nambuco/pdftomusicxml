@@ -1,9 +1,10 @@
 //! Writes a [`Score`] as MusicXML 4.0 (`score-partwise`), either as plain
-//! XML (`.musicxml`) or compressed (`.mxl`).
+//! XML (`.musicxml`) or compressed (`.mxl`), and reads one back ([`read`]).
 //!
 //! Element order follows the MusicXML 4.0 XSD, which is strict about
 //! sequence; `scripts/validate-xsd.sh` checks the output against it.
 
+pub mod read;
 mod xml;
 
 use std::io::{Cursor, Write as _};
@@ -13,6 +14,7 @@ use scorelift_model::*;
 use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
+pub use read::{ReadError, read_file};
 use xml::XmlWriter;
 
 #[derive(Debug, thiserror::Error)]
