@@ -1,6 +1,6 @@
 [package]
 name = "scorelift-semantic"
-description = "Musical interpretation for scorelift"
+description = "Musical interpretation for scorelift: symbols to Score"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,10 @@ repository.workspace = true
 
 [dependencies]
 scorelift-model.workspace = true
+scorelift-pdf.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+scorelift-musicxml.workspace = true

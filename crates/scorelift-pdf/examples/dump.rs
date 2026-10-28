@@ -26,6 +26,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 img.dpi()
             );
         }
+        println!(
+            "  {} glyphs, {} shapes",
+            page.glyphs.len(),
+            page.shapes.len()
+        );
+        if std::env::var_os("DUMP_VECTOR").is_some() {
+            for g in &page.glyphs {
+                let cps: Vec<String> = g
+                    .text
+                    .chars()
+                    .map(|c| format!("U+{:04X}", c as u32))
+                    .collect();
+                println!(
+                    "  glyph {:<12} {:<14} at ({:7.2}, {:7.2}) size {:5.2} width {:5.2}",
+                    g.font,
+                    cps.join(" "),
+                    g.x,
+                    g.y,
+                    g.size,
+                    g.width
+                );
+            }
+            for s in &page.shapes {
+                let b = s.bbox();
+                println!(
+                    "  shape stroke={:<6} filled={:<5} curved={:<5} paths={} bbox ({:.2}, {:.2}) {:.2}x{:.2}",
+                    s.stroke.map_or("-".into(), |w| format!("{w:.2}")),
+                    s.filled,
+                    s.curved,
+                    s.subpaths.len(),
+                    b.x,
+                    b.y,
+                    b.w,
+                    b.h
+                );
+            }
+        }
         for w in &page.warnings {
             println!("  warning: {w}");
         }

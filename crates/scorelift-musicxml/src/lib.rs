@@ -101,10 +101,15 @@ pub fn write_file(score: &Score, path: &Path) -> Result<(), Error> {
 }
 
 fn write_header(w: &mut XmlWriter, meta: &Metadata) {
+    // No <credit> elements: without page coordinates, editors pile them up
+    // in one corner. Given the titles and creators, MuseScore lays out the
+    // title and composer itself; it prefers movement-title, so write both.
+    // The subtitle has no un-positioned home and goes to <miscellaneous>.
     if let Some(title) = &meta.title {
         w.open("work", &[]);
         w.text("work-title", &[], title);
         w.close();
+        w.text("movement-title", &[], title);
     }
 
     w.open("identification", &[]);
@@ -127,28 +132,18 @@ fn write_header(w: &mut XmlWriter, meta: &Metadata) {
         concat!("scorelift ", env!("CARGO_PKG_VERSION")),
     );
     w.close();
-    if !meta.misc.is_empty() {
+    let subtitle = meta.subtitle.iter().map(|s| ("subtitle", s.as_str()));
+    let misc: Vec<(&str, &str)> = subtitle
+        .chain(meta.misc.iter().map(|(n, v)| (n.as_str(), v.as_str())))
+        .collect();
+    if !misc.is_empty() {
         w.open("miscellaneous", &[]);
-        for (name, value) in &meta.misc {
+        for (name, value) in misc {
             w.text("miscellaneous-field", &[("name", name)], value);
         }
         w.close();
     }
     w.close();
-
-    // Credits make titles visible when the file is opened in a notation editor.
-    for (kind, value) in [
-        ("title", &meta.title),
-        ("subtitle", &meta.subtitle),
-        ("composer", &meta.composer),
-    ] {
-        if let Some(v) = value {
-            w.open("credit", &[("page", "1")]);
-            w.text("credit-type", &[], kind);
-            w.text("credit-words", &[], v);
-            w.close();
-        }
-    }
 }
 
 fn write_part_list(w: &mut XmlWriter, parts: &[Part]) {

@@ -3,6 +3,7 @@
 //! Durations and offsets are exact [`Fraction`]s of a whole note, so rhythm
 //! checks never suffer from floating-point rounding.
 
+pub mod compare;
 pub mod fixtures;
 mod fraction;
 mod score;

@@ -24,6 +24,11 @@ if [[ ! -f "$SCHEMA_DIR/musicxml.xsd" ]]; then
 fi
 
 cargo run --quiet -p scorelift-musicxml --example write_fixtures -- "$OUT_DIR" >/dev/null
+# Also check what the vector reader recovers from the engraved fixtures.
+for pdf in crates/scorelift-semantic/tests/fixtures/musescore/*.pdf; do
+  name=$(basename "$pdf" .pdf)
+  cargo run --quiet -p scorelift-cli -- convert "$pdf" -o "$OUT_DIR/$name.from-pdf.musicxml" >/dev/null
+done
 
 status=0
 for f in "$OUT_DIR"/*.musicxml; do

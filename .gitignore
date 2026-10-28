@@ -5,6 +5,8 @@
 # Copyrighted scores must never be committed. Keep them in fixtures-private/.
 /fixtures-private/
 *.pdf
+# Except our own CC0 fixtures, engraved by notation software for the vector tests.
+!crates/scorelift-semantic/tests/fixtures/**/*.pdf
 
 .DS_Store
 *.swp

@@ -178,7 +178,7 @@ eval/                  # ground truth + metrics harness
 |---|---|---|
 | M0 ✅ | Project setup (1 wk) | Workspace, CI matrix builds on all 3 OSes, license, CONTRIBUTING, Score IR + MusicXML writer with hand-built test scores that pass XSD validation |
 | M1 ✅ | Ingest + vision (2 wk) | `scorelift debug in.pdf` extracts the system images from all 3 samples and writes overlay PNGs with staves and barlines detected (100% of staves/measures found on the samples). **Result:** 61/61 staves, 274 measures; spot-checked systems match the printed measure numbers |
-| M2 | Vector fast path (2 wk) | Vector PDFs exported from MuseScore convert end to end at ≥98% note accuracy. Proves stages 5–7 without ML |
+| M2 ✅ | Vector fast path (2 wk) | Vector PDFs exported from MuseScore convert end to end at ≥98% note accuracy. Proves stages 5–7 without ML. **Result:** 100% of notes and rests on all three fixtures engraved by MuseScore 4 (pitch, duration, onset), plus clefs, keys, times, ties, slurs, tuplets, grace notes, dots, beams, lyrics, dynamics, hairpins, tempo, rehearsal marks, repeats, endings, multi-measure rests, title/composer/part names |
 | M3 | Classical recognisers + SIG (2 wk) | Template matching for noteheads, clefs and accidentals; morphology for stems and beams; interpretation graph + reduction. No ML yet (the Audiveris approach) |
 | M4 | Monophonic raster MVP (2 wk) | **Perfect Strangers Vocal** → MusicXML with ≥90% note accuracy (lyrics optional); compared against Audiveris on the same file |
 | M4b | Training pipeline v1 (3 wk, runs alongside M4–M6) | Synthetic data generator + segmentation and detector models exported to ONNX. Their outputs become extra inters with grades, so the robustness gains don't require rewriting the pipeline |
@@ -211,3 +211,11 @@ Total: about 20 weeks for one developer. M2 and M3 can run in parallel.
 - **Measure each row's darkness against the lightest row nearby**, and grow each line from its darkest row. A fixed cutoff merges lines with nearby dense chords.
 - **Allow one missing interior line**, and keep only the darkest row of a band that is too thick. Multi-measure rest bars and beams lying on a line otherwise hide it.
 - **A barline stops exactly at the outer staff lines and has no notehead beside its ends.** Stems that span the whole staff fail one of these tests.
+
+### M2 lessons
+- **Music fonts map glyphs to SMuFL code points through ToUnicode.** MuseScore (Leland) does; tempo notes use the newer metronome range U+ECA0–ECB7 in the text font, not U+E1D0.
+- **Programs split lines into pieces.** Staff lines are drawn per measure group, and system barlines per gap between staves; join touching collinear segments before analysing.
+- **Lyric hyphens can be drawn lines, not "-" text**, and directions like "let ring" share the lyric font: tell them apart by phrase shape (a direction contains spaces) and alignment under noteheads.
+- **Dots are found to the right of a chord up to the next event further right**, not the next event in x order, which may belong to another voice at the same position.
+- **Untested so far:** Dorico (Bravura), Sibelius and Finale exports; cross-staff beams; more than two voices per staff; let-ring ties.
+

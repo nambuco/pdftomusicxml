@@ -131,12 +131,36 @@ fn load_pdf(input: &Path) -> Result<Analysis, Error> {
 }
 
 /// Converts a PDF or image file into a [`Score`].
-pub fn convert(input: &Path, _options: &ConvertOptions) -> Result<Score, Error> {
+pub fn convert(input: &Path, _options: &ConvertOptions) -> Result<Conversion, Error> {
     if !input.exists() {
         return Err(Error::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("{} does not exist", input.display()),
         )));
     }
-    Err(Error::NotImplemented("symbol recognition"))
+    let is_pdf = input
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    if is_pdf {
+        // Fast path: PDFs exported from notation software carry the music
+        // as SMuFL glyphs and vector lines, so nothing needs recognising.
+        let doc = scorelift_pdf::load(input)?;
+        if let Some(reading) = scorelift_semantic::read_vector(&doc) {
+            return Ok(Conversion {
+                score: reading.score,
+                warnings: reading.warnings,
+            });
+        }
+    }
+    Err(Error::NotImplemented(
+        "recognition of scanned or image-only scores (this file has no music font)",
+    ))
+}
+
+/// The result of [`convert`].
+#[derive(Debug)]
+pub struct Conversion {
+    pub score: Score,
+    /// Parts of the input that could not be read.
+    pub warnings: Vec<String>,
 }

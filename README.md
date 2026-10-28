@@ -3,9 +3,11 @@
 Open-source, offline converter from PDF sheet music to MusicXML, written in Rust.
 Runs on macOS, Windows and Linux.
 
-> **Status: milestone M1.** PDFs are read and staves, barlines and measures
-> are found. Notes are not recognised yet, so `convert` does not produce a
-> score. See [docs/PLAN.md](docs/PLAN.md).
+> **Status: milestone M2.** PDFs exported from notation software convert to
+> MusicXML. Tested with MuseScore 4; other programs that use a SMuFL music
+> font (Dorico, recent Sibelius and Finale) should work but are untested.
+> Scanned and image-only PDFs are analysed (staves, barlines, measures) but
+> their notes are not recognised yet. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Workspace
 
@@ -14,17 +16,23 @@ Runs on macOS, Windows and Linux.
 | `scorelift-model` | Score IR (parts, measures, voices, events), validation, fixtures | ✅ M0 |
 | `scorelift-musicxml` | IR → MusicXML 4.0 (`.musicxml`) and compressed `.mxl` | ✅ M0 |
 | `scorelift-cli` | `scorelift` command-line tool (`debug`, `demo`, `convert`) | ✅ M1 |
-| `scorelift-core` | Pipeline orchestration (`analyze`, `convert`) | ✅ up to GRID |
-| `scorelift-pdf` | PDF ingest: embedded images, placement, text layer (pure Rust) | ✅ M1 |
+| `scorelift-core` | Pipeline orchestration (`analyze`, `convert`) | ✅ vector path |
+| `scorelift-pdf` | PDF ingest: images, glyphs (with Unicode/SMuFL), vector paths (pure Rust) | ✅ M2 |
 | `scorelift-vision` | Binarization, scale, staves, barlines, measures, overlays | ✅ M1 |
 | `scorelift-detect` | Symbol recognisers (templates, later ONNX models) | stub (M3) |
-| `scorelift-semantic` | Interpretation graph, pitch/rhythm/voices | stub (M3) |
+| `scorelift-semantic` | Vector reader: SMuFL glyphs + lines → `Score` (pitch, rhythm, voices, ties, lyrics, …) | ✅ M2 |
 
 ## Build
 
 ```bash
 cargo build --release
 cargo test --workspace
+```
+
+Convert a PDF exported from notation software:
+
+```bash
+cargo run --release -p scorelift-cli -- convert score.pdf -o score.mxl
 ```
 
 Try the writer with a built-in demo score, then open the file in MuseScore:

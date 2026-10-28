@@ -55,11 +55,17 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Debug { input, output } => debug::run(&input, &output)?,
         Command::Convert { input, output } => {
-            let score = scorelift_core::convert(&input, &Default::default())?;
-            for issue in validate::validate(&score) {
+            let conversion = scorelift_core::convert(&input, &Default::default())?;
+            for w in &conversion.warnings {
+                eprintln!("warning: {w}");
+            }
+            for issue in validate::validate(&conversion.score) {
                 eprintln!("warning: {issue}");
             }
-            scorelift_musicxml::write_file(&score, &output)?;
+            if let Some(dir) = output.parent().filter(|d| !d.as_os_str().is_empty()) {
+                std::fs::create_dir_all(dir)?;
+            }
+            scorelift_musicxml::write_file(&conversion.score, &output)?;
             println!("wrote {}", output.display());
         }
         Command::Demo { name: None, .. } => {

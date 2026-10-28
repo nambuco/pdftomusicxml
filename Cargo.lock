@@ -669,6 +669,8 @@ name = "scorelift-semantic"
 version = "0.1.0"
 dependencies = [
  "scorelift-model",
+ "scorelift-musicxml",
+ "scorelift-pdf",
 ]
 
 [[package]]
