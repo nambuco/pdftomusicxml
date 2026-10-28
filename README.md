@@ -4,8 +4,9 @@ Open-source, offline converter from PDF sheet music to MusicXML, written in Rust
 Runs on macOS, Windows and Linux.
 
 > **Status: milestone M2.** PDFs exported from notation software convert to
-> MusicXML. Tested with MuseScore 4; other programs that use a SMuFL music
-> font (Dorico, recent Sibelius and Finale) should work but are untested.
+> MusicXML. Tested with MuseScore 4 (Leland) and Dorico 6 (Bravura); other
+> programs that use a SMuFL music font (recent Sibelius and Finale) should
+> work but are untested.
 > Scanned and image-only PDFs are analysed (staves, barlines, measures) but
 > their notes are not recognised yet. See [docs/PLAN.md](docs/PLAN.md).
 

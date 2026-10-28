@@ -1,0 +1,1 @@
+Dorico 6 (exported by hand: File > Import MusicXML, then Export PDF with default layout)

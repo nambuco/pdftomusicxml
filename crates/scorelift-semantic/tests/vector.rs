@@ -1,15 +1,17 @@
-//! Round trip: built-in fixture → MusicXML → MuseScore 4 PDF (committed in
-//! tests/fixtures/musescore) → vector reader → compared with the fixture.
-//! Regenerate the PDFs with `scripts/make-vector-fixtures.sh`.
+//! Round trip: built-in fixture → MusicXML → engraved PDF (committed in
+//! tests/fixtures/<program>) → vector reader → compared with the fixture.
+//! MuseScore PDFs are regenerated with `scripts/make-vector-fixtures.sh`;
+//! Dorico has no command line, so its PDFs were exported by hand.
 
 use std::path::PathBuf;
 
 use scorelift_model::compare::compare;
 use scorelift_model::*;
 
-fn read(name: &str) -> Score {
+fn read(engraver: &str, name: &str) -> Score {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/musescore")
+        .join("tests/fixtures")
+        .join(engraver)
         .join(format!("{name}.pdf"));
     let doc = scorelift_pdf::load(&path).expect("fixture PDF loads");
     let reading = scorelift_semantic::read_vector(&doc).expect("music font found");
@@ -17,9 +19,9 @@ fn read(name: &str) -> Score {
     reading.score
 }
 
-fn assert_notes_match(name: &str) -> Score {
+fn assert_notes_match(engraver: &str, name: &str) -> Score {
     let expected = fixtures::by_name(name).unwrap();
-    let found = read(name);
+    let found = read(engraver, name);
     let c = compare(&expected, &found);
     assert_eq!(c.f1(), 1.0, "{name}:\n{c}");
     assert_eq!(c.expected_measures, c.found_measures, "{name}:\n{c}");
@@ -34,7 +36,7 @@ fn assert_notes_match(name: &str) -> Score {
 
 #[test]
 fn c_major_scale() {
-    let s = assert_notes_match("c-major-scale");
+    let s = assert_notes_match("musescore", "c-major-scale");
     assert_eq!(s.metadata.title.as_deref(), Some("C Major Scale"));
     let m1 = &s.parts[0].measures[0];
     assert_eq!(m1.attributes.key.map(|k| k.fifths), Some(0));
@@ -50,7 +52,7 @@ fn c_major_scale() {
 
 #[test]
 fn piano_duet() {
-    let s = assert_notes_match("piano-duet");
+    let s = assert_notes_match("musescore", "piano-duet");
     assert_eq!(s.parts.len(), 2);
     assert_eq!(s.parts[0].name, "Voice");
     assert_eq!(s.parts[1].name, "Piano");
@@ -75,7 +77,7 @@ fn piano_duet() {
 
 #[test]
 fn feature_tour() {
-    let s = assert_notes_match("feature-tour");
+    let s = assert_notes_match("musescore", "feature-tour");
     let meta = &s.metadata;
     assert_eq!(meta.title.as_deref(), Some("Feature Tour"));
     assert_eq!(meta.composer.as_deref(), Some("The scorelift contributors"));
@@ -155,4 +157,53 @@ fn feature_tour() {
     // The 3-bar multi-measure rest expands to three measures.
     assert_eq!(m[7].attributes.multiple_rest, Some(3));
     assert!(m[7].new_system);
+}
+
+// Dorico draws noteheads with Bravura's optional "oversized" glyphs, typed
+// lyric hyphens, filled hairpins, and lays out its own rehearsal marks.
+
+#[test]
+fn dorico_c_major_scale() {
+    assert_notes_match("dorico", "c-major-scale");
+}
+
+#[test]
+fn dorico_piano_duet() {
+    let s = assert_notes_match("dorico", "piano-duet");
+    assert_eq!(s.parts[1].staves, 2);
+    let lyrics: Vec<Syllabic> = s.parts[0].measures[0].voices[0]
+        .events
+        .iter()
+        .flat_map(|e| e.lyrics.iter().map(|l| l.syllabic))
+        .collect();
+    assert_eq!(lyrics, [Syllabic::Single, Syllabic::Begin, Syllabic::End]);
+}
+
+#[test]
+fn dorico_feature_tour() {
+    let s = assert_notes_match("dorico", "feature-tour");
+    let m = &s.parts[0].measures;
+    // Dorico prints its own rehearsal letter, and the dynamic sits below
+    // the lyrics, closer to the midpoint between systems.
+    let kinds: Vec<&DirectionKind> = m[0].directions.iter().map(|d| &d.kind).collect();
+    assert!(kinds.contains(&&DirectionKind::Rehearsal("A".into())));
+    assert!(kinds.contains(&&DirectionKind::Dynamic(Dynamic::Mf)));
+    assert!(
+        m[3].directions
+            .iter()
+            .any(|d| d.kind == DirectionKind::Wedge(WedgeKind::Crescendo))
+    );
+    let ending = |b: &Option<Barline>| {
+        b.as_ref()
+            .and_then(|b| b.ending.clone())
+            .map(|e| (e.number, e.kind))
+    };
+    assert_eq!(
+        ending(&m[5].left_barline),
+        Some(("1".into(), EndingKind::Start))
+    );
+    assert_eq!(
+        ending(&m[6].right_barline),
+        Some(("2".into(), EndingKind::Discontinue))
+    );
 }

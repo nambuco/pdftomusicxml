@@ -439,7 +439,10 @@ pub fn layout(page: &PdfPage) -> (Vec<System>, PageText) {
         .glyphs
         .iter()
         .filter_map(|g| {
-            let sym = smufl::classify(g.text.chars().next()?)?;
+            let (c, small) = smufl::standard(&g.font, g.text.chars().next()?);
+            let sym = smufl::classify(c)?;
+            // Small (cue) variants drawn at full size count as small glyphs.
+            let size = if small { 0.7 * g.size } else { g.size };
             Some((
                 MusicGlyph {
                     sym,
@@ -448,7 +451,7 @@ pub fn layout(page: &PdfPage) -> (Vec<System>, PageText) {
                     w: g.width,
                     rel_size: 0.0,
                 },
-                g.size,
+                size,
             ))
         })
         .collect();
@@ -527,15 +530,21 @@ pub fn layout(page: &PdfPage) -> (Vec<System>, PageText) {
         let s = &staves[order[i]];
         // Above the first staff on the page, only the nearest text belongs
         // to it; further up are titles and credits.
+        // Between two staves, only what sits close above the lower one
+        // (tempo, text, endings) belongs to it; dynamics and lyrics further
+        // down still belong to the upper staff, even past the midpoint.
+        let boundary = |upper: &Staff, lower: &Staff| {
+            ((upper.bottom() + lower.top()) / 2.0).max(lower.top() - 5.0 * lower.sp)
+        };
         let lo = if i == 0 {
             s.top() - 5.5 * s.sp
         } else {
-            (staves[i - 1].bottom() + s.top()) / 2.0
+            boundary(&staves[i - 1], s)
         };
         let hi = if i + 1 == n {
             s.bottom() + 12.0 * s.sp
         } else {
-            (s.bottom() + staves[i + 1].top()) / 2.0
+            boundary(s, &staves[i + 1])
         };
         (lo, hi)
     };

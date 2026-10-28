@@ -1066,6 +1066,28 @@ fn attach_directions(staff: &Staff, measures: &mut [StaffMeasure]) {
         }
     }
 
+    // Hairpins drawn as one filled outline: thin at the tip, open at the
+    // other end (a beam keeps the same thickness all along).
+    for f in &staff.fills {
+        let (w, h) = (f.x1 - f.x0, f.y1 - f.y0);
+        let outside = f.y0 > staff.bottom() + 0.3 * sp || f.y1 < staff.top() - 0.3 * sp;
+        if f.curved || !outside || w < 2.0 * sp || h > 2.5 * sp {
+            continue;
+        }
+        let thickness = |x: f32| f.y_range_at(x).map_or(0.0, |(a, b)| b - a);
+        let (left, right) = (thickness(f.x0 + 0.05 * w), thickness(f.x1 - 0.05 * w));
+        let kind = if left < 0.4 * right {
+            WedgeKind::Crescendo
+        } else if right < 0.4 * left {
+            WedgeKind::Diminuendo
+        } else {
+            continue;
+        };
+        let y = (f.y0 + f.y1) / 2.0;
+        push(measures, f.x0, y, DirectionKind::Wedge(kind));
+        push(measures, f.x1, y, DirectionKind::Wedge(WedgeKind::Stop));
+    }
+
     // Tempo: a metronome note glyph followed by "= N".
     let mut tempo_words: Vec<(f32, f32)> = Vec::new();
     for g in &staff.glyphs {
@@ -1180,10 +1202,13 @@ fn phrases(words: &[Word]) -> Vec<Word> {
     sorted.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x0.total_cmp(&b.x0)));
     let mut out: Vec<Word> = Vec::new();
     for w in sorted {
+        // A hyphen between words is a lyric hyphen, never part of a phrase.
         if let Some(p) = out.last_mut()
             && (p.y - w.y).abs() < 0.1
             && p.font == w.font
             && w.x0 - p.x1 < 0.6 * w.size
+            && p.text != "-"
+            && w.text != "-"
         {
             p.text.push(' ');
             p.text.push_str(&w.text);
@@ -1320,11 +1345,12 @@ pub fn endings(staff: &Staff) -> Vec<(f32, f32, String, bool)> {
         if !s.is_horizontal() || s.a.y > staff.top() - 1.0 * sp || s.len() < 2.0 * sp {
             continue;
         }
+        // Line caps can put the hook half a line width away from the end.
         let hook = |x: f32| {
             staff.segments.iter().any(|v| {
                 v.is_vertical()
-                    && (v.a.x - x).abs() < 0.3
-                    && (v.y0() - s.a.y).abs() < 0.3
+                    && (v.a.x - x).abs() < 0.3 * sp
+                    && (v.y0() - s.a.y).abs() < 0.3 * sp
                     && v.len() > 0.8 * sp
             })
         };

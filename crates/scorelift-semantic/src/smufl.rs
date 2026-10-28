@@ -127,6 +127,142 @@ pub fn classify(c: char) -> Option<Sym> {
     })
 }
 
+/// Maps a font-specific optional glyph to its standard SMuFL code point.
+/// Optional glyphs (U+F400 and up) differ per font; for example Dorico draws
+/// noteheads with Bravura's oversized variants. Returns the character to
+/// classify and whether it is a small (cue-size) variant drawn at full size.
+pub fn standard(font: &str, c: char) -> (char, bool) {
+    let cp = c as u32;
+    if cp >= 0xF400
+        && font.starts_with("Bravura")
+        && let Some((std, small)) = bravura_alternate(cp)
+        && let Some(std) = char::from_u32(std)
+    {
+        return (std, small);
+    }
+    (c, false)
+}
+
+/// Bravura's optional glyphs that stand for a standard symbol, generated
+/// from the font's SMuFL metadata (`glyphsWithAlternates`). Returns the
+/// standard code point and whether the glyph is a small (cue) variant.
+fn bravura_alternate(cp: u32) -> Option<(u32, bool)> {
+    Some(match cp {
+        0xF400 => (0xE000, true),  // braceSmall
+        0xF401 => (0xE000, false), // braceLarge
+        0xF402 => (0xE000, false), // braceLarger
+        0xF403 => (0xE000, false), // braceFlat
+        0xF406 => (0xE062, false), // fClefFrench
+        0xF407 => (0xE062, false), // fClef19thCentury
+        0xF408 => (0xE05C, false), // cClefFrench
+        0xF409 => (0xE069, false), // unpitchedPercussionClef1Alt
+        0xF40A => (0xE06D, false), // 6stringTabClefTall
+        0xF40B => (0xE06D, false), // 6stringTabClefSerif
+        0xF40F => (0xE240, false), // flag8thUpStraight
+        0xF410 => (0xE240, false), // flag8thUpShort
+        0xF411 => (0xE241, false), // flag8thDownStraight
+        0xF412 => (0xE242, false), // flag16thUpStraight
+        0xF413 => (0xE242, false), // flag16thUpShort
+        0xF414 => (0xE243, false), // flag16thDownStraight
+        0xF415 => (0xE244, false), // flag32ndUpStraight
+        0xF416 => (0xE244, false), // flag32ndUpShort
+        0xF417 => (0xE245, false), // flag32ndDownStraight
+        0xF418 => (0xE246, false), // flag64thUpStraight
+        0xF419 => (0xE246, false), // flag64thUpShort
+        0xF41A => (0xE247, false), // flag64thDownStraight
+        0xF41B => (0xE248, false), // flag128thUpStraight
+        0xF41C => (0xE248, false), // flag128thUpShort
+        0xF41D => (0xE249, false), // flag128thDownStraight
+        0xF427 => (0xE260, true),  // accidentalFlatSmall
+        0xF428 => (0xE261, true),  // accidentalNaturalSmall
+        0xF429 => (0xE262, true),  // accidentalSharpSmall
+        0xF42A => (0xE4A0, false), // articAccentAboveLarge
+        0xF42B => (0xE4A1, false), // articAccentBelowLarge
+        0xF43F => (0xE0A0, false), // noteheadDoubleWholeAlt
+        0xF440 => (0xE080, false), // timeSig0Large
+        0xF441 => (0xE081, false), // timeSig1Large
+        0xF442 => (0xE082, false), // timeSig2Large
+        0xF443 => (0xE083, false), // timeSig3Large
+        0xF444 => (0xE084, false), // timeSig4Large
+        0xF445 => (0xE085, false), // timeSig5Large
+        0xF446 => (0xE086, false), // timeSig6Large
+        0xF447 => (0xE087, false), // timeSig7Large
+        0xF448 => (0xE088, false), // timeSig8Large
+        0xF449 => (0xE089, false), // timeSig9Large
+        0xF44A => (0xE08A, false), // timeSigCommonLarge
+        0xF44B => (0xE08B, false), // timeSigCutCommonLarge
+        0xF45D => (0xE080, true),  // timeSig0Small
+        0xF45E => (0xE081, true),  // timeSig1Small
+        0xF45F => (0xE082, true),  // timeSig2Small
+        0xF460 => (0xE083, true),  // timeSig3Small
+        0xF461 => (0xE084, true),  // timeSig4Small
+        0xF462 => (0xE085, true),  // timeSig5Small
+        0xF463 => (0xE086, true),  // timeSig6Small
+        0xF464 => (0xE087, true),  // timeSig7Small
+        0xF465 => (0xE088, true),  // timeSig8Small
+        0xF466 => (0xE089, true),  // timeSig9Small
+        0xF467 => (0xE0A0, true),  // noteheadDoubleWholeSmall
+        0xF468 => (0xE0A2, true),  // noteheadWholeSmall
+        0xF469 => (0xE0A3, true),  // noteheadHalfSmall
+        0xF46A => (0xE0A4, true),  // noteheadBlackSmall
+        0xF46B => (0xE520, true),  // dynamicPianoSmall
+        0xF46D => (0xE522, true),  // dynamicForteSmall
+        0xF472 => (0xE050, true),  // gClefSmall
+        0xF473 => (0xE05C, true),  // cClefSmall
+        0xF474 => (0xE062, true),  // fClefSmall
+        0xF475 => (0xE4A0, true),  // articAccentAboveSmall
+        0xF476 => (0xE4A1, true),  // articAccentBelowSmall
+        0xF477 => (0xE4A2, true),  // articStaccatoAboveSmall
+        0xF478 => (0xE4A3, true),  // articStaccatoBelowSmall
+        0xF479 => (0xE4A4, true),  // articTenutoAboveSmall
+        0xF47A => (0xE4A5, true),  // articTenutoBelowSmall
+        0xF481 => (0xE4AC, true),  // articMarcatoAboveSmall
+        0xF482 => (0xE4AD, true),  // articMarcatoBelowSmall
+        0xF48B => (0xE240, true),  // flag8thUpSmall
+        0xF48C => (0xE241, true),  // flag8thDownSmall
+        0xF48D => (0xE242, true),  // flag16thUpSmall
+        0xF48E => (0xE243, true),  // flag16thDownSmall
+        0xF48F => (0xE244, true),  // flag32ndUpSmall
+        0xF490 => (0xE245, true),  // flag32ndDownSmall
+        0xF491 => (0xE246, true),  // flag64thUpSmall
+        0xF492 => (0xE247, true),  // flag64thDownSmall
+        0xF493 => (0xE248, true),  // flag128thUpSmall
+        0xF494 => (0xE249, true),  // flag128thDownSmall
+        0xF4A1 => (0xE264, false), // accidentalDoubleFlatJoinedStems
+        0xF4BA => (0xE0A0, false), // noteheadDoubleWholeOversized
+        0xF4BC => (0xE0A2, false), // noteheadWholeOversized
+        0xF4BD => (0xE0A3, false), // noteheadHalfOversized
+        0xF4BE => (0xE0A4, false), // noteheadBlackOversized
+        0xF4BF => (0xE05C, false), // cClefFrench20C
+        0xF4CC => (0xE880, false), // tuplet0Light
+        0xF4CD => (0xE881, false), // tuplet1Light
+        0xF4CE => (0xE882, false), // tuplet2Light
+        0xF4CF => (0xE883, false), // tuplet3Light
+        0xF4D0 => (0xE884, false), // tuplet4Light
+        0xF4D1 => (0xE885, false), // tuplet5Light
+        0xF4D2 => (0xE886, false), // tuplet6Light
+        0xF4D3 => (0xE887, false), // tuplet7Light
+        0xF4D4 => (0xE888, false), // tuplet8Light
+        0xF4D5 => (0xE889, false), // tuplet9Light
+        0xF506 => (0xE080, false), // timeSig0Narrow
+        0xF507 => (0xE081, false), // timeSig1Narrow
+        0xF508 => (0xE082, false), // timeSig2Narrow
+        0xF509 => (0xE083, false), // timeSig3Narrow
+        0xF50A => (0xE084, false), // timeSig4Narrow
+        0xF50B => (0xE085, false), // timeSig5Narrow
+        0xF50C => (0xE086, false), // timeSig6Narrow
+        0xF50D => (0xE087, false), // timeSig7Narrow
+        0xF50E => (0xE088, false), // timeSig8Narrow
+        0xF50F => (0xE089, false), // timeSig9Narrow
+        0xF510 => (0xE08A, false), // timeSigCommonNarrow
+        0xF511 => (0xE08B, false), // timeSigCutCommonNarrow
+        0xF532 => (0xE4A0, false), // articAccentAboveRossini
+        0xF533 => (0xE4A1, false), // articAccentBelowRossini
+        0xF53D => (0xE052, false), // gClef8vbFrench
+        _ => return None,
+    })
+}
+
 /// True for code points in the Unicode Private Use Area, where SMuFL lives.
 pub fn is_music(c: char) -> bool {
     (0xE000..=0xF8FF).contains(&(c as u32))
@@ -146,5 +282,8 @@ mod tests {
         assert_eq!(classify('\u{E52D}'), Some(Sym::Dynamic(Dynamic::Mf)));
         assert_eq!(classify('\u{ECA5}'), Some(Sym::MetNote(NoteType::Quarter)));
         assert_eq!(classify('A'), None);
+        assert_eq!(standard("Bravura", '\u{F4BE}'), ('\u{E0A4}', false));
+        assert_eq!(standard("Bravura", '\u{F46A}'), ('\u{E0A4}', true));
+        assert_eq!(standard("Leland", '\u{F4BE}'), ('\u{F4BE}', false));
     }
 }

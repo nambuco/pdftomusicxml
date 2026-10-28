@@ -217,5 +217,6 @@ Total: about 20 weeks for one developer. M2 and M3 can run in parallel.
 - **Programs split lines into pieces.** Staff lines are drawn per measure group, and system barlines per gap between staves; join touching collinear segments before analysing.
 - **Lyric hyphens can be drawn lines, not "-" text**, and directions like "let ring" share the lyric font: tell them apart by phrase shape (a direction contains spaces) and alignment under noteheads.
 - **Dots are found to the right of a chord up to the next event further right**, not the next event in x order, which may belong to another voice at the same position.
-- **Untested so far:** Dorico (Bravura), Sibelius and Finale exports; cross-staff beams; more than two voices per staff; let-ring ties.
+- **Dorico 6 (Bravura) works after one addition:** it draws noteheads with Bravura's *optional* glyphs (U+F4BE "noteheadBlackOversized" etc.), which are font-specific. A table generated from Bravura's SMuFL metadata (`glyphsWithAlternates`) maps 111 alternates to their standard symbols. Dorico also types lyric hyphens as "-" text, draws hairpins as one filled outline, offsets ending hooks by half a line width, and places dynamics below lyrics, close to the next system. All three fixtures: 100% of notes and rests.
+- **Untested so far:** Sibelius and Finale exports; other fonts' optional glyphs (the installed SMuFL metadata in `/Library/Application Support/SMuFL/Fonts/<font>/` could be read at run time); cross-staff beams; more than two voices per staff; let-ring ties.
 
