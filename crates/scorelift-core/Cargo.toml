@@ -9,6 +9,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+image.workspace = true
 scorelift-detect.workspace = true
 scorelift-model.workspace = true
 scorelift-pdf.workspace = true

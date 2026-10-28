@@ -1,3 +1,5 @@
+mod debug;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -30,6 +32,13 @@ enum Command {
         #[arg(short, long, default_value = "demo.mxl")]
         output: PathBuf,
     },
+    /// Analyze staves, barlines and measures, and write overlay images and layout.json.
+    Debug {
+        input: PathBuf,
+        /// Directory for the overlay PNGs and layout.json.
+        #[arg(short, long, default_value = "debug")]
+        output: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -44,6 +53,7 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
+        Command::Debug { input, output } => debug::run(&input, &output)?,
         Command::Convert { input, output } => {
             let score = scorelift_core::convert(&input, &Default::default())?;
             for issue in validate::validate(&score) {

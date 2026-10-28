@@ -84,7 +84,8 @@ eval/                  # ground truth + metrics harness
 ### Pipeline stages
 
 **1. Ingest** (`scorelift-pdf`)
-- Use `pdfium-render`, which binds to PDFium (BSD/Apache). The PDFium dynamic library ships with the app. It is the most reliable cross-platform renderer and can also list page objects.
+- **Done in M1, pure Rust:** `lopdf` reads the PDF; we walk each page's content stream (tracking the transform matrix through `q`/`Q`/`cm` and nested forms), decode every image XObject (Flate/LZW/DCT; Gray/RGB/CMYK/ICC/Indexed/Separation; 1–16 bit; SMask) to grayscale and record where it is drawn. No native library to ship.
+- Rendering pages to pixels (needed only for vector pages without the music-font fast path, and for exotic image codecs such as JBIG2/CCITT/JPX in scans) is deferred. If needed, add `pdfium-render` behind a feature flag.
 - For each page, classify how the music is stored:
   - **Raster-embedded** (like the samples): extract the image XObjects at native resolution, keep their placement on the page, and treat each one as a system candidate.
   - **Vector with music font** (MuseScore, Sibelius, Finale, Dorico, LilyPond exports): music glyphs are text runs in SMuFL fonts (Bravura, Leland, Emmentaler…), and staff lines are paths. → **fast path** (step 4b) with near-perfect accuracy.
@@ -168,15 +169,15 @@ eval/                  # ground truth + metrics harness
 - GitHub Actions matrix: `macos-14` (arm64), `macos-13` (x64), `windows-latest`, `ubuntu-22.04` (x64 + arm64).
 - CLI: `cargo-dist` produces tarballs, a shell/PowerShell installer and Homebrew/Scoop manifests.
 - GUI: the Tauri bundler produces a `.dmg` (signed and notarized), an `.msi`/NSIS installer, and `.AppImage` + `.deb`, plus a Flathub manifest later.
-- Bundled native pieces: the PDFium library (prebuilt from `bblanchon/pdfium-binaries`) and the ONNX Runtime (static). The models sit in the app resources and are found through a `models/` lookup path.
+- Bundled native pieces: the ONNX Runtime (static), and PDFium only if the optional renderer feature is added. The models sit in the app resources and are found through a `models/` lookup path.
 - Linux GUI depends on WebKitGTK and Windows needs WebView2. Both are standard; document them.
 
 ## 7. Milestones
 
 | # | Milestone | Deliverable / exit criteria |
 |---|---|---|
-| M0 | Project setup (1 wk) | Workspace, CI matrix builds on all 3 OSes, license, CONTRIBUTING, Score IR + MusicXML writer with hand-built test scores that pass XSD validation |
-| M1 | Ingest + vision (2 wk) | `scorelift debug in.pdf` extracts the system images from all 3 samples and writes overlay PNGs with staves and barlines detected (100% of staves/measures found on the samples) |
+| M0 ✅ | Project setup (1 wk) | Workspace, CI matrix builds on all 3 OSes, license, CONTRIBUTING, Score IR + MusicXML writer with hand-built test scores that pass XSD validation |
+| M1 ✅ | Ingest + vision (2 wk) | `scorelift debug in.pdf` extracts the system images from all 3 samples and writes overlay PNGs with staves and barlines detected (100% of staves/measures found on the samples). **Result:** 61/61 staves, 274 measures; spot-checked systems match the printed measure numbers |
 | M2 | Vector fast path (2 wk) | Vector PDFs exported from MuseScore convert end to end at ≥98% note accuracy. Proves stages 5–7 without ML |
 | M3 | Classical recognisers + SIG (2 wk) | Template matching for noteheads, clefs and accidentals; morphology for stems and beams; interpretation graph + reduction. No ML yet (the Audiveris approach) |
 | M4 | Monophonic raster MVP (2 wk) | **Perfect Strangers Vocal** → MusicXML with ≥90% note accuracy (lyrics optional); compared against Audiveris on the same file |
@@ -203,4 +204,10 @@ Total: about 20 weeks for one developer. M2 and M3 can run in parallel.
 1. Install the Rust toolchain (`rustup`), plus Python 3.11 for `training/`.
 2. Run `git init` and create the workspace skeleton (M0).
 3. Write the Score IR and MusicXML writer first. Every later stage builds on them.
-4. Build the M1 debug overlay tool against the three sample PDFs.
+4. ~~Build the M1 debug overlay tool against the three sample PDFs.~~ Done.
+
+### M1 lessons
+- **Find staff lines on the gray image, not the binary one.** A one-pixel anti-aliased line that straddles two rows is half-dark in each and disappears after thresholding.
+- **Measure each row's darkness against the lightest row nearby**, and grow each line from its darkest row. A fixed cutoff merges lines with nearby dense chords.
+- **Allow one missing interior line**, and keep only the darkest row of a band that is too thick. Multi-measure rest bars and beams lying on a line otherwise hide it.
+- **A barline stops exactly at the outer staff lines and has no notehead beside its ends.** Stems that span the whole staff fail one of these tests.

@@ -3,8 +3,9 @@
 Open-source, offline converter from PDF sheet music to MusicXML, written in Rust.
 Runs on macOS, Windows and Linux.
 
-> **Status: milestone M0.** The score model and the MusicXML writer work.
-> PDF recognition is not implemented yet. See [docs/PLAN.md](docs/PLAN.md).
+> **Status: milestone M1.** PDFs are read and staves, barlines and measures
+> are found. Notes are not recognised yet, so `convert` does not produce a
+> score. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Workspace
 
@@ -12,10 +13,10 @@ Runs on macOS, Windows and Linux.
 |---|---|---|
 | `scorelift-model` | Score IR (parts, measures, voices, events), validation, fixtures | ✅ M0 |
 | `scorelift-musicxml` | IR → MusicXML 4.0 (`.musicxml`) and compressed `.mxl` | ✅ M0 |
-| `scorelift-cli` | `scorelift` command-line tool | ✅ skeleton |
-| `scorelift-core` | Pipeline orchestration (`convert`) | stub |
-| `scorelift-pdf` | PDF ingest: image extraction, rendering, text layer | stub (M1) |
-| `scorelift-vision` | Binarization, scale, staff/barline detection | stub (M1) |
+| `scorelift-cli` | `scorelift` command-line tool (`debug`, `demo`, `convert`) | ✅ M1 |
+| `scorelift-core` | Pipeline orchestration (`analyze`, `convert`) | ✅ up to GRID |
+| `scorelift-pdf` | PDF ingest: embedded images, placement, text layer (pure Rust) | ✅ M1 |
+| `scorelift-vision` | Binarization, scale, staves, barlines, measures, overlays | ✅ M1 |
 | `scorelift-detect` | Symbol recognisers (templates, later ONNX models) | stub (M3) |
 | `scorelift-semantic` | Interpretation graph, pitch/rhythm/voices | stub (M3) |
 
@@ -30,6 +31,14 @@ Try the writer with a built-in demo score, then open the file in MuseScore:
 
 ```bash
 cargo run -p scorelift-cli -- demo feature-tour -o out/feature-tour.mxl
+```
+
+See what the recogniser finds in a PDF or PNG/JPEG. This writes one overlay
+image per system (staff lines red, barlines blue, measures shaded) and a
+`layout.json` with all measurements:
+
+```bash
+cargo run --release -p scorelift-cli -- debug score.pdf -o out/debug
 ```
 
 Validate all fixtures against the official MusicXML 4.0 XSD (needs `xmllint` and `curl`):

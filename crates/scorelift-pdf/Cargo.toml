@@ -1,6 +1,6 @@
 [package]
 name = "scorelift-pdf"
-description = "PDF ingest for scorelift: embedded image extraction, page rendering, text layer"
+description = "PDF ingest for scorelift: embedded image extraction, placement and text layer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,10 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-scorelift-model.workspace = true
+image.workspace = true
+lopdf.workspace = true
+serde.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

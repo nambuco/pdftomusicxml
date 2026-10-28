@@ -17,6 +17,8 @@ clap.workspace = true
 scorelift-core.workspace = true
 scorelift-model.workspace = true
 scorelift-musicxml.workspace = true
+scorelift-vision.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

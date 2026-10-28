@@ -9,7 +9,12 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+image.workspace = true
 scorelift-model.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+scorelift-model.workspace = true
