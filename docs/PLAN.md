@@ -233,7 +233,7 @@ Accuracy (notes and rests correct, F1) on MuseScore-engraved 280 dpi PNGs:
 
 On the three private samples, about 2/3 of vocal measures, 2/3 of organ measures and 1/4 of Wish You Were Here measures add up to the time signature (a rough proxy; there is no ground truth for them yet).
 
-Not done yet: a real interpretation graph (only score-ranked overlap resolution and a few support rules so far), tuplets other than beamed triplets, overlapping second voices, text (lyrics, words, tempo; needs OCR), hairpins and endings from images. On the Ultimate Guitar samples, beams meeting stems in their engraving style are still often missed; measuring that properly needs a ground-truth transcription (M4).
+Not done yet: a real interpretation graph (only score-ranked overlap resolution and a few support rules so far), tuplets other than beamed triplets, overlapping second voices, text (lyrics, words, tempo; needs OCR), hairpins and endings from images. On the Ultimate Guitar samples, measures whose notes do not add up to the time signature: vocal 41 of 94, organ 56 of 124, Wish You Were Here 15 of 83. Measuring real accuracy needs a ground-truth transcription (M4).
 
 ### M3 lessons
 - **Score symbols by shape agreement in both directions, with one pixel of slack.** Recall = template pixels with ink nearby; precision = ink (in the window and a ring around it) near the template. Plain Dice misses thin hollow noteheads; slack on recall alone floods false matches.
@@ -248,4 +248,7 @@ Not done yet: a real interpretation graph (only score-ranked overlap resolution 
 - **Beamed triplets by position**: a beam over exactly three stems with a small compact mark centred just beyond it. The digit is italic text in most engravings, so its shape is not matched.
 - **Grace notes by measured width**: a full-size template also fits a smaller head, so the head's ink across its middle row decides. A rest crossed by a stem is a grace note's flag or slash, not a rest.
 - **Multi-measure rests**: a thick bar on the middle line, at least 3 staff spaces long, with tall serifs at both ends; nothing inside it is a note.
+- **Find beams before resolving symbol overlaps**, from the image with only stems removed. Otherwise a false notehead on a beam gets erased with the beam pixels under it and cuts the beam short. A beam is a straight band: one run per column, even thickness, centres on a line (a whole note, fermata or dynamic letter is not).
+- **Stem direction of a chord** comes from the stem's overhang beyond the outermost heads, not from the average head height: in a chord the stem starts at one end head and runs through the others.
+- **Rebuild the binary you measure with.** `cargo build --examples` builds only the examples; sample counts taken with a stale `scorelift` binary hid two improvements for a while.
 

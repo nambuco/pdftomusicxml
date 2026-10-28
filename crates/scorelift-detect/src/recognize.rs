@@ -544,6 +544,38 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
         }
         cands.retain(|c| !matches!(c.sym, Sym::Head(_)) || c.score >= head_threshold(c.sym));
 
+        // Beams first, from the image with only the stems removed: a false
+        // notehead on a beam must not cut the beam short. Candidates lying
+        // mostly on beam pixels are not notes, rests, accidentals or dots.
+        let mut stem_free = clean.clone();
+        erase_stems(&mut stem_free, &stems);
+        let mut beam_mask = BinaryImage::new(clean.width(), clean.height());
+        let mut beams: Vec<Fill> = Vec::new();
+        let region = (
+            xl.max(0),
+            ((s.top() - 6.0 * sp) as i64).max(0),
+            xr,
+            (s.bottom() + 6.0 * sp) as i64,
+        );
+        for comp in components(&stem_free, region.0, region.1, region.2, region.3) {
+            if let Some(f) = beam_from(&comp, sp) {
+                for &(x, y) in &comp {
+                    beam_mask.set(x as u32, y as u32, true);
+                }
+                beams.push(f);
+            }
+        }
+        cands.retain(|c| {
+            if !matches!(
+                c.sym,
+                Sym::Head(_) | Sym::Rest(_) | Sym::Accidental(_) | Sym::Dot
+            ) {
+                return true;
+            }
+            let on_beam = beam_mask.count(c.x0, c.y0, c.x0 + c.w, c.y0 + c.h) as f32;
+            on_beam < 0.25 * (c.w * c.h) as f32
+        });
+
         // Multi-measure rests: a thick bar on the middle line with a tall
         // serif at each end. Nothing inside it is a note or a rest.
         let bars = hbars(&clean, s.lines[2], sp, xl, xr);
@@ -653,21 +685,9 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
             }
         }
 
-        // Beams and curves: what is left after removing stems and symbols.
+        // Curves and tuplet marks: what is left after removing stems and symbols.
         let mut rest_img = clean.clone();
-        for st in &stems {
-            for x in st.0 - 1..=st.1 + 1 {
-                for y in st.2..=st.3 {
-                    if x >= 0
-                        && y >= 0
-                        && x < i64::from(rest_img.width())
-                        && y < i64::from(rest_img.height())
-                    {
-                        rest_img.set(x as u32, y as u32, false);
-                    }
-                }
-            }
-        }
+        erase_stems(&mut rest_img, &stems);
         for c in &kept {
             for y in c.y0..c.y0 + c.h {
                 for x in c.x0..c.x0 + c.w {
@@ -681,21 +701,9 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 }
             }
         }
-        let mut fills = Vec::new();
+        let mut fills = beams;
         let mut marks: Vec<(i64, i64, i64, i64)> = Vec::new();
-        let region = (
-            xl,
-            (s.top() - 6.0 * sp) as i64,
-            xr,
-            (s.bottom() + 6.0 * sp) as i64,
-        );
-        for comp in components(
-            &rest_img,
-            region.0.max(0),
-            region.1.max(0),
-            region.2,
-            region.3,
-        ) {
+        for comp in components(&rest_img, region.0, region.1, region.2, region.3) {
             let (cx0, cx1) = comp
                 .iter()
                 .fold((i64::MAX, i64::MIN), |(a, b), p| (a.min(p.0), b.max(p.0)));
@@ -722,26 +730,7 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 let hi = *ys.iter().max()?;
                 Some((lo as f32, hi as f32 + 1.0))
             };
-            if mean_thick >= 0.28 * sp && mean_thick <= 0.9 * sp {
-                // A beam: a straight band of even thickness.
-                let (Some(l), Some(r)) = (column(cx0 + 1), column(cx1 - 1)) else {
-                    continue;
-                };
-                let (fx0, fx1) = (cx0 as f32, (cx1 + 1) as f32);
-                fills.push(Fill {
-                    points: vec![
-                        Point { x: fx0, y: l.0 },
-                        Point { x: fx1, y: r.0 },
-                        Point { x: fx1, y: r.1 },
-                        Point { x: fx0, y: l.1 },
-                    ],
-                    curved: false,
-                    x0: fx0,
-                    x1: fx1,
-                    y0: l.0.min(r.0),
-                    y1: l.1.max(r.1),
-                });
-            } else if mean_thick < 0.28 * sp && (cy1 - cy0) as f32 <= 1.5 * sp {
+            if mean_thick < 0.28 * sp && (cy1 - cy0) as f32 <= 1.5 * sp {
                 // A tie or slur: a thin, shallow curve. Its outline is
                 // approximated by the centre line of each column.
                 let mut points = Vec::new();
@@ -1071,4 +1060,90 @@ fn hbars(img: &BinaryImage, mid: f32, sp: f32, x0: i64, x1: i64) -> Vec<(i64, i6
         }
     }
     out
+}
+
+/// Erases stem columns (with one pixel on each side).
+fn erase_stems(img: &mut BinaryImage, stems: &[(i64, i64, i64, i64)]) {
+    for st in stems {
+        for x in st.0 - 1..=st.1 + 1 {
+            for y in st.2..=st.3 {
+                if x >= 0 && y >= 0 && x < i64::from(img.width()) && y < i64::from(img.height()) {
+                    img.set(x as u32, y as u32, false);
+                }
+            }
+        }
+    }
+}
+
+/// A beam: a band at least 1.5 staff spaces long and of beam thickness,
+/// returned as a four-point polygon.
+fn beam_from(comp: &[(i64, i64)], sp: f32) -> Option<Fill> {
+    let (cx0, cx1) = comp
+        .iter()
+        .fold((i64::MAX, i64::MIN), |(a, b), p| (a.min(p.0), b.max(p.0)));
+    let (cy0, cy1) = comp
+        .iter()
+        .fold((i64::MAX, i64::MIN), |(a, b), p| (a.min(p.1), b.max(p.1)));
+    let width = cx1 - cx0 + 1;
+    if (width as f32) < 1.5 * sp || (cy1 - cy0) as f32 > 3.0 * sp {
+        return None;
+    }
+    let mean_thick = comp.len() as f32 / width as f32;
+    if !(0.28 * sp..=0.9 * sp).contains(&mean_thick) {
+        return None;
+    }
+    // A beam is a straight band: every column one run of about the same
+    // thickness, centres on a line. A hollow notehead has two runs per
+    // column, a fermata or slur bends, a dynamic letter varies in thickness.
+    let mut cols: Vec<Vec<i64>> = vec![Vec::new(); width as usize];
+    for &(x, y) in comp {
+        cols[(x - cx0) as usize].push(y);
+    }
+    let mut runs = Vec::with_capacity(cols.len());
+    for ys in &mut cols {
+        ys.sort_unstable();
+        let single = ys.windows(2).all(|w| w[1] - w[0] <= 1);
+        runs.push((
+            single,
+            ys.len() as f32,
+            (ys[0] + ys[ys.len() - 1]) as f32 / 2.0,
+        ));
+    }
+    let single = runs.iter().filter(|r| r.0).count() as f32 / runs.len() as f32;
+    let mut thick: Vec<f32> = runs.iter().map(|r| r.1).collect();
+    thick.sort_by(f32::total_cmp);
+    let median = thick[thick.len() / 2];
+    let even = runs
+        .iter()
+        .filter(|r| (r.1 - median).abs() <= 0.3 * median + 1.0)
+        .count() as f32
+        / runs.len() as f32;
+    let (first, last) = (runs[0].2, runs[runs.len() - 1].2);
+    let straight = runs.iter().enumerate().all(|(i, r)| {
+        let t = i as f32 / (runs.len() - 1).max(1) as f32;
+        (r.2 - (first + t * (last - first))).abs() <= 0.2 * sp + 1.0
+    });
+    if single < 0.9 || even < 0.8 || !straight {
+        return None;
+    }
+    let column = |x: i64| -> Option<(f32, f32)> {
+        let ys = comp.iter().filter(|p| p.0 == x).map(|p| p.1);
+        let (lo, hi) = ys.fold((i64::MAX, i64::MIN), |(a, b), y| (a.min(y), b.max(y)));
+        (lo <= hi).then_some((lo as f32, hi as f32 + 1.0))
+    };
+    let (l, r) = (column(cx0 + 1)?, column(cx1 - 1)?);
+    let (fx0, fx1) = (cx0 as f32, (cx1 + 1) as f32);
+    Some(Fill {
+        points: vec![
+            Point { x: fx0, y: l.0 },
+            Point { x: fx1, y: r.0 },
+            Point { x: fx1, y: r.1 },
+            Point { x: fx0, y: l.1 },
+        ],
+        curved: false,
+        x0: fx0,
+        x1: fx1,
+        y0: l.0.min(r.0),
+        y1: l.1.max(r.1),
+    })
 }

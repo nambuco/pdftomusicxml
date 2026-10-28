@@ -588,9 +588,11 @@ fn build_chords(heads: &[MusicGlyph], stems: &[Segment], sp: f32) -> Vec<Chord> 
     chords.retain(|c| !c.heads.is_empty());
     for c in &mut chords {
         let s = c.stem.unwrap();
-        let mean_y = c.heads.iter().map(|h| h.y).sum::<f32>() / c.heads.len() as f32;
-        // The stem extends away from the heads.
-        c.up = Some(s.y0() < mean_y - 0.5 * sp);
+        // The stem runs through all heads of a chord and extends beyond the
+        // outermost one on its free side: compare the two overhangs.
+        let top = c.heads.iter().map(|h| h.y).fold(f32::MAX, f32::min);
+        let bottom = c.heads.iter().map(|h| h.y).fold(f32::MIN, f32::max);
+        c.up = Some(top - s.y0() > s.y1() - bottom);
         c.small = c.heads.iter().all(|h| h.rel_size < 0.85);
     }
     // Stemless heads (whole notes) at the same x form chords.
