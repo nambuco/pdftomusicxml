@@ -1,0 +1,10 @@
+/target/
+/.cache/
+/out/
+
+# Copyrighted scores must never be committed. Keep them in fixtures-private/.
+/fixtures-private/
+*.pdf
+
+.DS_Store
+*.swp

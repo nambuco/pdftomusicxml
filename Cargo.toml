@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["The scorelift contributors"]
+repository = "https://github.com/nambuco/pdftomusicxml"
+
+[workspace.dependencies]
+scorelift-core = { path = "crates/scorelift-core" }
+scorelift-detect = { path = "crates/scorelift-detect" }
+scorelift-model = { path = "crates/scorelift-model" }
+scorelift-musicxml = { path = "crates/scorelift-musicxml" }
+scorelift-pdf = { path = "crates/scorelift-pdf" }
+scorelift-semantic = { path = "crates/scorelift-semantic" }
+scorelift-vision = { path = "crates/scorelift-vision" }
+
+clap = { version = "4", features = ["derive"] }
+roxmltree = "0.20"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,22 @@
+[package]
+name = "scorelift-cli"
+description = "Command-line tool to convert PDF sheet music to MusicXML"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "scorelift"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+scorelift-core.workspace = true
+scorelift-model.workspace = true
+scorelift-musicxml.workspace = true
+
+[lints]
+workspace = true

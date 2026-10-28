@@ -1,0 +1,15 @@
+[package]
+name = "scorelift-detect"
+description = "Symbol recognisers for scorelift"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+scorelift-model.workspace = true
+
+[lints]
+workspace = true

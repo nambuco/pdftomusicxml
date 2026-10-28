@@ -1,0 +1,20 @@
+[package]
+name = "scorelift-core"
+description = "PDF sheet music to MusicXML conversion pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+scorelift-detect.workspace = true
+scorelift-model.workspace = true
+scorelift-pdf.workspace = true
+scorelift-semantic.workspace = true
+scorelift-vision.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
