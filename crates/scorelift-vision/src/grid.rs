@@ -73,22 +73,37 @@ pub fn find_staves(gray: &GrayImage, img: &BinaryImage, scale: &Scale) -> Vec<St
         // The longest run of evenly spaced bands starting here. One missing
         // line is filled in: a multi-measure rest bar lying on a line, or a
         // faint anti-aliased line, can hide it from `line_bands`.
+        // Among the bands that fit the spacing, take the best fit, with a
+        // strong preference for dark ones: a beam or ledger row near a line
+        // must not replace the line itself.
+        let darkest = bands.iter().map(|b| b.darkness).fold(1.0, f32::max);
+        let best_at = |from: f32, gap: f32| {
+            bands
+                .iter()
+                .filter(|b| (b.center - from - gap).abs() <= tolerance)
+                .min_by(|a, b| {
+                    let fit = |l: &LineBand| {
+                        (l.center - from - gap).abs() / tolerance - l.darkness / darkest
+                    };
+                    fit(a).total_cmp(&fit(b))
+                })
+                .copied()
+        };
         let mut chain = vec![bands[i]];
         let mut filled = false;
-        for b in &bands[i + 1..] {
+        loop {
             let last = *chain.last().unwrap();
-            let gap = b.center - last.center;
-            if (gap - il).abs() <= tolerance {
-                chain.push(*b);
-            } else if !filled && (gap - 2.0 * il).abs() <= tolerance {
+            if let Some(b) = best_at(last.center, il) {
+                chain.push(b);
+            } else if !filled && let Some(b) = best_at(last.center, 2.0 * il) {
                 filled = true;
                 chain.push(LineBand {
                     center: (last.center + b.center) / 2.0,
                     thickness: last.thickness.min(b.thickness),
                     darkness: 0.0,
                 });
-                chain.push(*b);
-            } else if gap > 2.0 * il + tolerance {
+                chain.push(b);
+            } else {
                 break;
             }
         }
@@ -153,10 +168,26 @@ pub fn line_bands(gray: &GrayImage, scale: &Scale) -> Vec<LineBand> {
         })
         .collect();
     let max = darkness.iter().copied().fold(0.0, f32::max);
-    if max <= 0.0 {
-        return Vec::new();
-    }
     let max_thickness = (2.5 * scale.line_thickness).max(3.0) as usize + 1;
+
+    // A staff line is a long unbroken dark run; notes, text and beams only
+    // make short ones. Measuring length (not total darkness) also keeps
+    // short staves, such as a final system a third of the page wide.
+    let longest: Vec<u32> = gray
+        .rows()
+        .map(|row| {
+            let (mut best, mut run) = (0u32, 0u32);
+            for p in row {
+                run = if p.0[0] < 200 { run + 1 } else { 0 };
+                best = best.max(run);
+            }
+            best
+        })
+        .collect();
+    let min_run = (6.0 * scale.interline) as u32;
+    let long_line = |y: usize| {
+        (y.saturating_sub(1)..=(y + 1).min(longest.len() - 1)).any(|r| longest[r] >= min_run)
+    };
 
     // Grow a band around each local peak over rows at least half as dark.
     let mut bands = Vec::new();
@@ -165,22 +196,25 @@ pub fn line_bands(gray: &GrayImage, scale: &Scale) -> Vec<LineBand> {
         let d = darkness[y];
         let left = if y > 0 { darkness[y - 1] } else { 0.0 };
         let right = darkness.get(y + 1).copied().unwrap_or(0.0);
-        if y < next_free || d < 0.3 * max || d <= left || d < right {
+        if y < next_free || d < 0.1 * max || !long_line(y) || d <= left || d < right {
             continue;
         }
+        // Grow over rows at least half as dark, but never into a darker row:
+        // that is another, stronger line.
+        let grows = |r: usize| darkness[r] >= 0.5 * d && darkness[r] <= d;
         let (mut start, mut end) = (y, y);
-        while start > next_free && y - start < max_thickness && darkness[start - 1] >= 0.5 * d {
+        while start > next_free && y - start < max_thickness && grows(start - 1) {
             start -= 1;
         }
-        while end + 1 < darkness.len() && end - y < max_thickness && darkness[end + 1] >= 0.5 * d {
+        while end + 1 < darkness.len() && end - y < max_thickness && grows(end + 1) {
             end += 1;
         }
-        next_free = end + 1;
         // Too thick for a line: a beam or rest bar lying on it. Keep only the
         // peak row; the spacing and extent checks reject it if it is no line.
         if end - start + 1 > max_thickness {
             (start, end) = (y, y);
         }
+        next_free = end + 1;
         let thickness = (end - start + 1) as u32;
         let (mut sum, mut total) = (0.0f64, 0.0f32);
         for (row, &v) in darkness.iter().enumerate().take(end + 1).skip(start) {

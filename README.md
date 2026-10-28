@@ -3,12 +3,10 @@
 Open-source, offline converter from PDF sheet music to MusicXML, written in Rust.
 Runs on macOS, Windows and Linux.
 
-> **Status: milestone M2.** PDFs exported from notation software convert to
-> MusicXML. Tested with MuseScore 4 (Leland) and Dorico 6 (Bravura); other
-> programs that use a SMuFL music font (recent Sibelius and Finale) should
-> work but are untested.
-> Scanned and image-only PDFs are analysed (staves, barlines, measures) but
-> their notes are not recognised yet. See [docs/PLAN.md](docs/PLAN.md).
+> **Status: milestone M3 (first version).** PDFs exported from notation
+> software convert to MusicXML (tested with MuseScore 4 and Dorico 6).
+> Scanned and image-only PDFs and PNG/JPEG images are now recognised too,
+> but accuracy is still low on dense music; see [docs/PLAN.md](docs/PLAN.md).
 
 ## Workspace
 
@@ -20,7 +18,7 @@ Runs on macOS, Windows and Linux.
 | `scorelift-core` | Pipeline orchestration (`analyze`, `convert`) | ✅ vector path |
 | `scorelift-pdf` | PDF ingest: images, glyphs (with Unicode/SMuFL), vector paths (pure Rust) | ✅ M2 |
 | `scorelift-vision` | Binarization, scale, staves, barlines, measures, overlays | ✅ M1 |
-| `scorelift-detect` | Symbol recognisers (templates, later ONNX models) | stub (M3) |
+| `scorelift-detect` | Image recognition: staff removal, stems, beams, Bravura templates | 🟡 M3 first version |
 | `scorelift-semantic` | Vector reader: SMuFL glyphs + lines → `Score` (pitch, rhythm, voices, ties, lyrics, …) | ✅ M2 |
 
 ## Build

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates the vector test PDFs: writes the built-in fixtures as MusicXML
+# Regenerates the engraved test files: writes the built-in fixtures as MusicXML
 # and engraves them with MuseScore 4. The results are committed, so CI does
 # not need MuseScore. All fixture music is original and CC0.
 #
@@ -26,3 +26,24 @@ for f in "$TMP"/*.musicxml; do
   fi
 done
 "$MSCORE" --version 2>/dev/null | tail -1 > "$OUT/GENERATOR.txt" || true
+
+# Raster versions at 280 dpi (staff space about 19 px, like typical web
+# scores) for the image recogniser: in Leland (MuseScore's default) and in
+# Bravura (via scripts/bravura.mss). MuseScore names pages <name>-1.png.
+render_png() { # <out dir> [style args…]
+  local dir=$1; shift
+  mkdir -p "$dir"
+  for f in "$TMP"/*.musicxml; do
+    name=$(basename "$f" .musicxml)
+    "$MSCORE" -r 280 "$@" -o "$dir/$name.png" "$f" >/dev/null 2>&1 || true
+    if [[ -s "$dir/$name-1.png" ]]; then
+      mv "$dir/$name-1.png" "$dir/$name.png"
+      echo "wrote $dir/$name.png"
+    else
+      echo "FAILED $dir/$name.png" >&2
+      exit 1
+    fi
+  done
+}
+render_png crates/scorelift-detect/tests/fixtures/musescore
+render_png crates/scorelift-detect/tests/fixtures/musescore-bravura --style scripts/bravura.mss

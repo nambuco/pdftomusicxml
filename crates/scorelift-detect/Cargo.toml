@@ -1,6 +1,6 @@
 [package]
 name = "scorelift-detect"
-description = "Symbol recognisers for scorelift"
+description = "Symbol recognition for raster scores: templates and morphology"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,15 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+image.workspace = true
 scorelift-model.workspace = true
+scorelift-pdf.workspace = true
+scorelift-semantic.workspace = true
+scorelift-vision.workspace = true
+
+[dev-dependencies]
+fontdue = "0.9"
+scorelift-musicxml.workspace = true
 
 [lints]
 workspace = true

@@ -38,6 +38,9 @@ enum Command {
         /// Directory for the overlay PNGs and layout.json.
         #[arg(short, long, default_value = "debug")]
         output: PathBuf,
+        /// Also save each image unmodified, as `<name>.raw.png`.
+        #[arg(long)]
+        raw: bool,
     },
 }
 
@@ -53,7 +56,7 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
-        Command::Debug { input, output } => debug::run(&input, &output)?,
+        Command::Debug { input, output, raw } => debug::run(&input, &output, raw)?,
         Command::Convert { input, output } => {
             let conversion = scorelift_core::convert(&input, &Default::default())?;
             for w in &conversion.warnings {

@@ -6,7 +6,7 @@
 //! needed, only interpretation.
 
 mod interpret;
-mod layout;
+pub mod layout;
 pub mod smufl;
 
 use scorelift_model::*;
@@ -36,6 +36,12 @@ pub fn read_vector(doc: &PdfDocument) -> Option<VectorReading> {
     if systems.is_empty() {
         return None;
     }
+    Some(read_systems(systems, texts))
+}
+
+/// Turns systems (from vector pages, or recognised from images) into a score.
+/// `texts` holds the page text outside the systems, for titles and credits.
+pub fn read_systems(systems: Vec<System>, texts: Vec<PageText>) -> VectorReading {
     let mut warnings = Vec::new();
 
     // Parts come from the first system: braced staves form one part.
@@ -203,10 +209,10 @@ pub fn read_vector(doc: &PdfDocument) -> Option<VectorReading> {
     expand_multirests(&mut parts);
     number_measures(&mut parts);
     let metadata = metadata(&texts, &systems[0]);
-    Some(VectorReading {
+    VectorReading {
         score: Score { metadata, parts },
         warnings,
-    })
+    }
 }
 
 /// A multi-measure rest is written once on the page but must appear as

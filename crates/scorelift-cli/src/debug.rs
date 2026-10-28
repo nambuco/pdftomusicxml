@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde_json::json;
 
-pub fn run(input: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(input: &Path, out_dir: &Path, raw: bool) -> Result<(), Box<dyn std::error::Error>> {
     let analysis = scorelift_core::analyze(input)?;
     std::fs::create_dir_all(out_dir)?;
 
@@ -17,6 +17,10 @@ pub fn run(input: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error
     for (i, sheet) in analysis.sheets.iter().enumerate() {
         let size = format!("{}x{}", sheet.image.width(), sheet.image.height());
         let file = format!("p{:02}-{:02}-{}.png", sheet.page, i + 1, sheet.name);
+        if raw {
+            let raw_file = format!("p{:02}-{:02}-{}.raw.png", sheet.page, i + 1, sheet.name);
+            sheet.image.save(out_dir.join(raw_file))?;
+        }
         match &sheet.layout {
             Some(layout) => {
                 let s = &layout.scale;

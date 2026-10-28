@@ -179,7 +179,7 @@ eval/                  # ground truth + metrics harness
 | M0 ✅ | Project setup (1 wk) | Workspace, CI matrix builds on all 3 OSes, license, CONTRIBUTING, Score IR + MusicXML writer with hand-built test scores that pass XSD validation |
 | M1 ✅ | Ingest + vision (2 wk) | `scorelift debug in.pdf` extracts the system images from all 3 samples and writes overlay PNGs with staves and barlines detected (100% of staves/measures found on the samples). **Result:** 61/61 staves, 274 measures; spot-checked systems match the printed measure numbers |
 | M2 ✅ | Vector fast path (2 wk) | Vector PDFs exported from MuseScore convert end to end at ≥98% note accuracy. Proves stages 5–7 without ML. **Result:** 100% of notes and rests on all three fixtures engraved by MuseScore 4 (pitch, duration, onset), plus clefs, keys, times, ties, slurs, tuplets, grace notes, dots, beams, lyrics, dynamics, hairpins, tempo, rehearsal marks, repeats, endings, multi-measure rests, title/composer/part names |
-| M3 | Classical recognisers + SIG (2 wk) | Template matching for noteheads, clefs and accidentals; morphology for stems and beams; interpretation graph + reduction. No ML yet (the Audiveris approach) |
+| M3 🟡 | Classical recognisers + SIG (2 wk) | Template matching for noteheads, clefs and accidentals; morphology for stems and beams; interpretation graph + reduction. No ML yet (the Audiveris approach) |
 | M4 | Monophonic raster MVP (2 wk) | **Perfect Strangers Vocal** → MusicXML with ≥90% note accuracy (lyrics optional); compared against Audiveris on the same file |
 | M4b | Training pipeline v1 (3 wk, runs alongside M4–M6) | Synthetic data generator + segmentation and detector models exported to ONNX. Their outputs become extra inters with grades, so the robustness gains don't require rewriting the pipeline |
 | M5 | Chords and polyphony (3 wk) | **Organ** and **Wish You Were Here** ≥85% note accuracy; ties, tuplets, grace notes, dynamics; validate/repair stage in place |
@@ -219,4 +219,28 @@ Total: about 20 weeks for one developer. M2 and M3 can run in parallel.
 - **Dots are found to the right of a chord up to the next event further right**, not the next event in x order, which may belong to another voice at the same position.
 - **Dorico 6 (Bravura) works after one addition:** it draws noteheads with Bravura's *optional* glyphs (U+F4BE "noteheadBlackOversized" etc.), which are font-specific. A table generated from Bravura's SMuFL metadata (`glyphsWithAlternates`) maps 111 alternates to their standard symbols. Dorico also types lyric hyphens as "-" text, draws hairpins as one filled outline, offsets ending hooks by half a line width, and places dynamics below lyrics, close to the next system. All three fixtures: 100% of notes and rests.
 - **Untested so far:** Sibelius and Finale exports; other fonts' optional glyphs (the installed SMuFL metadata in `/Library/Application Support/SMuFL/Fonts/<font>/` could be read at run time); cross-staff beams; more than two voices per staff; let-ring ties.
+
+### M3 status (first version)
+Image recognition works end to end: staff and ledger lines erased, stems and beams found by shape, noteheads, rests, clefs, accidentals, time digits, flags, dots and dynamics matched against Bravura templates, overlaps resolved by score with a few engraving rules, and the result handed to the same interpreter as the vector path.
+
+Accuracy (notes and rests correct, F1) on MuseScore-engraved 280 dpi PNGs:
+
+| Fixture | Bravura | Leland |
+|---|---|---|
+| C major scale | 100% | 100% |
+| Piano duet | 79% | 90% |
+| Feature tour | 33% | 31% |
+
+On the three private samples, about 2/3 of vocal measures, 2/3 of organ measures and 1/4 of Wish You Were Here measures add up to the time signature (a rough proxy; there is no ground truth for them yet).
+
+Not done yet: a real interpretation graph (only score-ranked overlap resolution and two support rules so far), tuplet numbers (italic text), chords mixing many heads, text (lyrics, words, tempo; needs OCR), hairpins and endings from images.
+
+### M3 lessons
+- **Score symbols by shape agreement in both directions, with one pixel of slack.** Recall = template pixels with ink nearby; precision = ink (in the window and a ring around it) near the template. Plain Dice misses thin hollow noteheads; slack on recall alone floods false matches.
+- **A ring around the template is essential**: without it, a rest rectangle "matches" half of a notehead and a digit matches part of a clef.
+- **Erase only a staff line's own rows**, not the whole short run, or hollow noteheads lose their rims.
+- **Erase known barlines before matching**; they look like flat stems, digit edges and rests.
+- **Engraving rules beat thresholds**: noteheads outside the staff need ledger lines (rejects tempo-mark notes and lyric letters), whole/half rests sit on inner lines with nothing extending sideways (rejects beam pieces), dots sit in spaces, a notehead with a stem at its edge gets a bonus over a rest in the same place.
+- **Staff-line finding by line length, not darkness**, keeps short final systems; when several bands fit the spacing, take the darkest best fit.
+- **Beams are cut by stem removal**; rejoin pieces that continue each other.
 
