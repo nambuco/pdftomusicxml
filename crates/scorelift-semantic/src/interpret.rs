@@ -666,7 +666,7 @@ fn build_event(
                     .iter()
                     .filter_map(|f| {
                         let x = s.a.x.clamp(f.x0 + 0.01, f.x1 - 0.01);
-                        if s.a.x < f.x0 - 0.15 * sp || s.a.x > f.x1 + 0.15 * sp {
+                        if s.a.x < f.x0 - 0.3 * sp || s.a.x > f.x1 + 0.3 * sp {
                             return None;
                         }
                         let (y0, y1) = f.y_range_at(x)?;
@@ -677,8 +677,8 @@ fn build_event(
                     .collect();
                 crossing.sort_by(|a, b| a.0.total_cmp(&b.0));
                 for (level, (_, f)) in crossing.iter().enumerate() {
-                    let at_start = (s.a.x - f.x0).abs() < 0.3 * sp;
-                    let at_end = (s.a.x - f.x1).abs() < 0.3 * sp;
+                    let at_start = (s.a.x - f.x0).abs() < 0.4 * sp;
+                    let at_end = (s.a.x - f.x1).abs() < 0.4 * sp;
                     let short = f.x1 - f.x0 < 1.6 * sp;
                     let value = if short && at_start {
                         BeamValue::ForwardHook

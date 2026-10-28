@@ -1,7 +1,7 @@
 //! Image recognition on the built-in fixtures, engraved by MuseScore 4 as
 //! 280 dpi PNGs in Bravura and in Leland (see scripts/make-vector-fixtures.sh).
 //!
-//! The floors are the accuracy reached so far (milestone M3), so tuning
+//! The floors are the accuracy reached so far, so tuning
 //! cannot silently make things worse. Raise them as recognition improves.
 
 use std::path::PathBuf;
@@ -28,12 +28,13 @@ fn c_major_scale_is_read_exactly() {
 
 #[test]
 fn piano_duet() {
-    assert!(f1("musescore-bravura", "piano-duet") >= 0.75);
-    assert!(f1("musescore", "piano-duet") >= 0.85);
+    assert!(f1("musescore-bravura", "piano-duet") >= 0.9);
+    assert!(f1("musescore", "piano-duet") >= 0.9);
 }
 
 #[test]
 fn feature_tour() {
-    assert!(f1("musescore-bravura", "feature-tour") >= 0.30);
-    assert!(f1("musescore", "feature-tour") >= 0.28);
+    // Chords, ties, a triplet, a grace note and a multi-measure rest.
+    assert_eq!(f1("musescore-bravura", "feature-tour"), 1.0);
+    assert!(f1("musescore", "feature-tour") >= 0.95);
 }

@@ -10,6 +10,23 @@ use scorelift_vision::{BinaryImage, Layout, binarize};
 
 use crate::templates::{self, Template};
 
+/// Size of grace-note glyphs relative to normal ones.
+const GRACE_SIZE: f32 = 0.65;
+
+/// Score added to a notehead with a stem at its edge.
+const STEM_BONUS: f32 = 0.06;
+
+/// Final notehead thresholds. Hollow heads are thin rings and score lower
+/// when slightly off; heads in chords score lower because their neighbours
+/// touch the ring, which the stem bonus makes up for.
+fn head_threshold(sym: Sym) -> f32 {
+    match sym {
+        Sym::Head(Head::Black) => 0.85,
+        Sym::Head(Head::Whole) => 0.75,
+        _ => 0.7,
+    }
+}
+
 /// Ink counts with O(1) rectangle sums.
 struct Integral {
     w: usize,
@@ -46,6 +63,8 @@ struct Candidate {
     w: i64,
     h: i64,
     origin_y: f32,
+    /// Size relative to normal glyphs (grace notes are smaller).
+    rel: f32,
 }
 
 impl Candidate {
@@ -142,6 +161,7 @@ fn scan_row(
             w: i64::from(t.width),
             h: i64::from(t.height),
             origin_y: oy,
+            rel: t.rel,
         };
         match &best {
             // Keep the best within one template width.
@@ -354,6 +374,11 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
     }
     let integral = Integral::new(&clean);
     let tpl = templates::load(il);
+    // Grace notes: small noteheads and flags.
+    let small: Vec<Template> = templates::load_small(il, GRACE_SIZE)
+        .into_iter()
+        .filter(|t| matches!(t.sym, Sym::Head(Head::Black) | Sym::Flag(..)))
+        .collect();
     let by = |pred: &dyn Fn(Sym) -> bool| -> Vec<&Template> {
         tpl.iter().filter(|t| pred(t.sym)).collect()
     };
@@ -368,13 +393,25 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
 
         for t in by(&|s| matches!(s, Sym::Head(_))) {
             // Hollow heads are thin rings and score lower when slightly off.
-            let min = match t.sym {
-                Sym::Head(Head::Black) => 0.85,
-                Sym::Head(Head::Whole) => 0.75,
-                _ => 0.7,
-            };
+            // Scanned below the final threshold: a stem at the edge can still
+            // lift a head over it (see `head_threshold`).
+            let min = head_threshold(t.sym) - STEM_BONUS;
             for step in -8..=16 {
                 scan_row(&clean, &integral, t, step_y(step), xl, xr, min, &mut cands);
+            }
+        }
+        for t in small.iter().filter(|t| matches!(t.sym, Sym::Head(_))) {
+            for step in -6..=14 {
+                scan_row(
+                    &clean,
+                    &integral,
+                    t,
+                    step_y(step),
+                    xl,
+                    xr,
+                    head_threshold(t.sym) - STEM_BONUS,
+                    &mut cands,
+                );
             }
         }
         for t in by(&|s| matches!(s, Sym::Accidental(_))) {
@@ -502,9 +539,22 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 at_edge && reaches
             });
             if attached {
-                c.score += 0.06;
+                c.score += STEM_BONUS;
             }
         }
+        cands.retain(|c| !matches!(c.sym, Sym::Head(_)) || c.score >= head_threshold(c.sym));
+
+        // Multi-measure rests: a thick bar on the middle line with a tall
+        // serif at each end. Nothing inside it is a note or a rest.
+        let bars = hbars(&clean, s.lines[2], sp, xl, xr);
+        cands.retain(|c| {
+            !(matches!(
+                c.sym,
+                Sym::Head(_) | Sym::Rest(_) | Sym::Accidental(_) | Sym::Dot
+            ) && bars.iter().any(|&(b0, b1)| {
+                c.x0 + c.w > b0 && c.x0 < b1 && (c.origin_y - s.lines[2]).abs() < 2.5 * sp
+            }))
+        });
 
         // Keep the best candidate where several overlap.
         cands.sort_by(|a, b| b.score.total_cmp(&a.score));
@@ -543,7 +593,8 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
             .collect();
 
         // Flags at stem ends, dots right of heads and rests.
-        let flag_tpl = by(&|s| matches!(s, Sym::Flag(..)));
+        let mut flag_tpl = by(&|s| matches!(s, Sym::Flag(..)));
+        flag_tpl.extend(small.iter().filter(|t| matches!(t.sym, Sym::Flag(..))));
         let dot_tpl = by(&|s| s == Sym::Dot);
         let mut extras: Vec<Candidate> = Vec::new();
         for st in &stems {
@@ -631,6 +682,7 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
             }
         }
         let mut fills = Vec::new();
+        let mut marks: Vec<(i64, i64, i64, i64)> = Vec::new();
         let region = (
             xl,
             (s.top() - 6.0 * sp) as i64,
@@ -651,6 +703,15 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 .iter()
                 .fold((i64::MAX, i64::MIN), |(a, b), p| (a.min(p.1), b.max(p.1)));
             let width = cx1 - cx0 + 1;
+            let height = cy1 - cy0 + 1;
+            // Small compact marks may be tuplet numbers; checked against
+            // beam groups below.
+            if (width as f32) <= 1.2 * sp
+                && (height as f32) >= 0.6 * sp
+                && (height as f32) <= 1.6 * sp
+            {
+                marks.push((cx0, cy0, cx1, cy1));
+            }
             if (width as f32) < 1.0 * sp || (cy1 - cy0) as f32 > 3.0 * sp {
                 continue;
             }
@@ -709,6 +770,71 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
 
         let fills = join_beams(fills, sp);
 
+        // Triplets: a beam over exactly three stems with a small mark
+        // centred just beyond it. The digit itself is italic text in most
+        // engravings (no SMuFL glyph), so its position identifies it.
+        for f in fills.iter().filter(|f| !f.curved) {
+            let covered = stems
+                .iter()
+                .filter(|st| {
+                    let x = (st.0 + st.1) as f32 / 2.0;
+                    x >= f.x0 - 0.3 * sp
+                        && x <= f.x1 + 0.3 * sp
+                        && st.2 as f32 <= f.y1 + 0.3 * sp
+                        && st.3 as f32 >= f.y0 - 0.3 * sp
+                })
+                .count();
+            if covered != 3 {
+                continue;
+            }
+            let cx = (f.x0 + f.x1) / 2.0;
+            let mark = marks.iter().find(|m| {
+                let mx = (m.0 + m.2) as f32 / 2.0;
+                let (my0, my1) = (m.1 as f32, m.3 as f32);
+                let above = my1 <= f.y0 && f.y0 - my1 <= 2.5 * sp;
+                let below = my0 >= f.y1 && my0 - f.y1 <= 2.5 * sp;
+                (mx - cx).abs() <= 0.8 * sp && (above || below)
+            });
+            if let Some(m) = mark {
+                kept.push(Candidate {
+                    sym: Sym::TupletDigit(3),
+                    score: 1.0,
+                    x0: m.0,
+                    y0: m.1,
+                    w: m.2 - m.0 + 1,
+                    h: m.3 - m.1 + 1,
+                    origin_y: m.3 as f32,
+                    rel: 1.0,
+                });
+            }
+        }
+
+        // A rest never has a stem through it (an eighth rest's own stroke is
+        // slanted, so it is not found as a stem): the flag or slash of a grace
+        // note is not a rest.
+        kept.retain(|c| {
+            !matches!(c.sym, Sym::Rest(_))
+                || !stems.iter().any(|st| {
+                    st.1 >= c.x0 && st.0 < c.x0 + c.w && st.3 >= c.y0 && st.2 < c.y0 + c.h
+                })
+        });
+
+        // Grace notes: a full-size template also fits a smaller notehead, so
+        // measure the head's ink across its middle row instead.
+        let normal_width = tpl
+            .iter()
+            .find(|t| t.sym == Sym::Head(Head::Black))
+            .map_or(1.2 * sp, |t| t.width as f32);
+        for c in kept.iter_mut().filter(|c| c.sym == Sym::Head(Head::Black)) {
+            let row = c.origin_y.round() as i64;
+            let width = (c.x0 - 2..c.x0 + c.w + 2)
+                .filter(|&x| clean.get(x, row))
+                .count() as f32;
+            if width < 0.82 * normal_width {
+                c.rel = GRACE_SIZE;
+            }
+        }
+
         let glyphs: Vec<MusicGlyph> = kept
             .iter()
             .map(|c| MusicGlyph {
@@ -716,7 +842,7 @@ pub fn recognize(gray: &GrayImage, layout: &Layout, page: u32) -> Vec<System> {
                 x: c.x0 as f32,
                 y: c.origin_y,
                 w: c.w as f32,
-                rel_size: 1.0,
+                rel_size: c.rel,
             })
             .collect();
         let segments: Vec<Segment> = stems
@@ -910,5 +1036,39 @@ fn join_beams(fills: Vec<Fill>, sp: f32) -> Vec<Fill> {
         f.points[2].x += pad;
     }
     out.extend(curves);
+    out
+}
+
+/// Multi-measure rest bars on the middle line: column runs at least 3 staff
+/// spaces long that are thick around the line, ending in tall serifs.
+fn hbars(img: &BinaryImage, mid: f32, sp: f32, x0: i64, x1: i64) -> Vec<(i64, i64)> {
+    let ink_in = |x: i64, ya: f32, yb: f32| {
+        (ya.round() as i64..=yb.round() as i64)
+            .filter(|&y| img.get(x, y))
+            .count() as f32
+    };
+    let thick = |x: i64| ink_in(x, mid - 0.4 * sp, mid + 0.4 * sp) >= 0.35 * sp;
+    let tall = |x: i64| ink_in(x, mid - 1.2 * sp, mid + 1.2 * sp) >= 1.4 * sp;
+    let mut out = Vec::new();
+    let mut x = x0;
+    while x < x1 {
+        if !thick(x) {
+            x += 1;
+            continue;
+        }
+        let start = x;
+        while x < x1 && thick(x) {
+            x += 1;
+        }
+        let end = x - 1;
+        let serif = |from: i64, to: i64| (from..=to).any(tall);
+        let reach = (0.4 * sp) as i64;
+        if (end - start) as f32 >= 3.0 * sp
+            && serif(start - reach, start + reach)
+            && serif(end - reach, end + reach)
+        {
+            out.push((start - reach, end + reach));
+        }
+    }
     out
 }

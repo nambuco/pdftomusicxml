@@ -77,6 +77,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     st.step(g.y)
                 );
             }
+            if std::env::var_os("SCORELIFT_TRACE").is_some() {
+                for f in &st.fills {
+                    let pts: Vec<String> = f
+                        .points
+                        .iter()
+                        .map(|p| format!("({:.0},{:.0})", p.x, p.y))
+                        .collect();
+                    eprintln!(
+                        "fill curved={} x {:.0}..{:.0} y {:.0}..{:.0} {}",
+                        f.curved,
+                        f.x0,
+                        f.x1,
+                        f.y0,
+                        f.y1,
+                        pts.join(" ")
+                    );
+                }
+                for s in &st.segments {
+                    eprintln!(
+                        "stem x {:.1} y {:.0}..{:.0} w {:.0}",
+                        s.a.x, s.a.y, s.b.y, s.width
+                    );
+                }
+            }
             for s in &st.segments {
                 rect(
                     &mut img,

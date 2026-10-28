@@ -228,12 +228,12 @@ Accuracy (notes and rests correct, F1) on MuseScore-engraved 280 dpi PNGs:
 | Fixture | Bravura | Leland |
 |---|---|---|
 | C major scale | 100% | 100% |
-| Piano duet | 79% | 90% |
-| Feature tour | 33% | 31% |
+| Piano duet | 90% | 90% |
+| Feature tour (chords, ties, triplet, grace note, multi-measure rest) | 100% | 97% |
 
 On the three private samples, about 2/3 of vocal measures, 2/3 of organ measures and 1/4 of Wish You Were Here measures add up to the time signature (a rough proxy; there is no ground truth for them yet).
 
-Not done yet: a real interpretation graph (only score-ranked overlap resolution and two support rules so far), tuplet numbers (italic text), chords mixing many heads, text (lyrics, words, tempo; needs OCR), hairpins and endings from images.
+Not done yet: a real interpretation graph (only score-ranked overlap resolution and a few support rules so far), tuplets other than beamed triplets, overlapping second voices, text (lyrics, words, tempo; needs OCR), hairpins and endings from images. On the Ultimate Guitar samples, beams meeting stems in their engraving style are still often missed; measuring that properly needs a ground-truth transcription (M4).
 
 ### M3 lessons
 - **Score symbols by shape agreement in both directions, with one pixel of slack.** Recall = template pixels with ink nearby; precision = ink (in the window and a ring around it) near the template. Plain Dice misses thin hollow noteheads; slack on recall alone floods false matches.
@@ -243,4 +243,9 @@ Not done yet: a real interpretation graph (only score-ranked overlap resolution 
 - **Engraving rules beat thresholds**: noteheads outside the staff need ledger lines (rejects tempo-mark notes and lyric letters), whole/half rests sit on inner lines with nothing extending sideways (rejects beam pieces), dots sit in spaces, a notehead with a stem at its edge gets a bonus over a rest in the same place.
 - **Staff-line finding by line length, not darkness**, keeps short final systems; when several bands fit the spacing, take the darkest best fit.
 - **Beams are cut by stem removal**; rejoin pieces that continue each other.
+- **Apply notehead thresholds after the stem bonus.** Heads in chords lose score to neighbours touching their ring; scanning below the threshold and then adding stem support recovers them. Dropping the top and bottom of the ring instead lets a head match half of the head above it.
+- **Beams cover a stem within 0.3 staff spaces**: in images, stem removal leaves a few pixels between a beam's end and its outer stems.
+- **Beamed triplets by position**: a beam over exactly three stems with a small compact mark centred just beyond it. The digit is italic text in most engravings, so its shape is not matched.
+- **Grace notes by measured width**: a full-size template also fits a smaller head, so the head's ink across its middle row decides. A rest crossed by a stem is a grace note's flag or slash, not a rest.
+- **Multi-measure rests**: a thick bar on the middle line, at least 3 staff spaces long, with tall serifs at both ends; nothing inside it is a note.
 

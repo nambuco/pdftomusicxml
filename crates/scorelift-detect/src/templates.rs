@@ -36,6 +36,8 @@ pub struct Template {
     pub margin: i64,
     /// `mask` grown by one pixel: image ink here is consistent with the shape.
     pub zone: Vec<bool>,
+    /// Size relative to normal glyphs (below 1 for grace and cue notes).
+    pub rel: f32,
 }
 
 impl Template {
@@ -73,10 +75,19 @@ fn u32_at(d: &[u8], i: usize) -> u32 {
 
 /// All templates scaled to staff space `sp` (pixels).
 pub fn load(sp: f32) -> Vec<Template> {
+    load_sized(sp, 1.0)
+}
+
+/// Templates for small (grace or cue) glyphs, `rel` times the normal size.
+pub fn load_small(sp: f32, rel: f32) -> Vec<Template> {
+    load_sized(sp, rel)
+}
+
+fn load_sized(sp: f32, rel: f32) -> Vec<Template> {
     assert_eq!(&DATA[..4], b"SLT1", "corrupt templates.bin");
     let sp_ref = u32_at(DATA, 4) as f32 / 100.0;
     let count = u32_at(DATA, 8) as usize;
-    let factor = sp / sp_ref;
+    let factor = sp * rel / sp_ref;
     let mut out = Vec::with_capacity(count);
     let mut i = 12;
     for _ in 0..count {
@@ -114,6 +125,7 @@ pub fn load(sp: f32) -> Vec<Template> {
             ink,
             margin: (0.2 * sp).round().max(2.0) as i64,
             zone,
+            rel,
         });
     }
     out
